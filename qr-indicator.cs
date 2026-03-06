@@ -3,8 +3,10 @@ using System;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Windows.Media;
+using System.Xml.Serialization;
 
 using NinjaTrader.Data;
+using NinjaTrader.Gui.Chart;
 using NinjaTrader.NinjaScript;
 using NinjaTrader.NinjaScript.DrawingTools;
 #endregion
@@ -13,11 +15,18 @@ namespace NinjaTrader.NinjaScript.Indicators
 {
 	public class QR : Indicator
 	{
-		// ===== Inputs =====
+		// =========================
+		// Inputs (logic)
+		// =========================
+
 		[NinjaScriptProperty]
 		[Range(1, 4)]
 		[Display(Name = "Min # of Stochastics for BG Coloring", Order = 1, GroupName = "Signals")]
 		public int MinCount { get; set; }
+
+		[NinjaScriptProperty]
+		[Display(Name = "Enable Alerts", Order = 1, GroupName = "Alerts")]
+		public bool EnableAlerts { get; set; }
 
 		// Stoch 1
 		[NinjaScriptProperty]
@@ -79,12 +88,122 @@ namespace NinjaTrader.NinjaScript.Indicators
 		[Display(Name = "Bars Since Below 10 (Short)", Order = 2, GroupName = "ABCD Shield")]
 		public int AbcdBars10 { get; set; }
 
-		// Alerts
-		[NinjaScriptProperty]
-		[Display(Name = "Enable Alerts", Order = 1, GroupName = "Alerts")]
-		public bool EnableAlerts { get; set; }
+		// =========================
+		// Inputs (visuals / colors)
+		// =========================
 
-		// ===== Internals =====
+		// TradingView-style filled 20-80 zone
+		[NinjaScriptProperty]
+		[Display(Name = "Show 20-80 Zone Fill", Order = 1, GroupName = "Colors - Zone")]
+		public bool ShowZoneFill { get; set; }
+
+		[NinjaScriptProperty]
+		[Range(0, 100)]
+		[Display(Name = "20-80 Zone Opacity (0-100)", Order = 2, GroupName = "Colors - Zone")]
+		public int ZoneOpacity { get; set; }
+
+		[XmlIgnore]
+		[Display(Name = "20-80 Zone Fill Color", Order = 3, GroupName = "Colors - Zone")]
+		public System.Windows.Media.Brush ZoneFillBrush { get; set; }
+
+		[Browsable(false)]
+		public string ZoneFillBrushSerialize
+		{
+			get { return BrushSerialization.ToString(ZoneFillBrush); }
+			set { ZoneFillBrush = BrushSerialization.FromString(value); }
+		}
+
+		// Quad rotation background colors (editable)
+		[NinjaScriptProperty]
+		[Range(0, 100)]
+		[Display(Name = "Quad RED Opacity (0-100)", Order = 1, GroupName = "Colors - Quad BG")]
+		public int QuadRedOpacity { get; set; }
+
+		[XmlIgnore]
+		[Display(Name = "Quad RED Color", Order = 2, GroupName = "Colors - Quad BG")]
+		public System.Windows.Media.Brush QuadRedBrush { get; set; }
+
+		[Browsable(false)]
+		public string QuadRedBrushSerialize
+		{
+			get { return BrushSerialization.ToString(QuadRedBrush); }
+			set { QuadRedBrush = BrushSerialization.FromString(value); }
+		}
+
+		[NinjaScriptProperty]
+		[Range(0, 100)]
+		[Display(Name = "Quad GREEN Opacity (0-100)", Order = 3, GroupName = "Colors - Quad BG")]
+		public int QuadGreenOpacity { get; set; }
+
+		[XmlIgnore]
+		[Display(Name = "Quad GREEN Color", Order = 4, GroupName = "Colors - Quad BG")]
+		public System.Windows.Media.Brush QuadGreenBrush { get; set; }
+
+		[Browsable(false)]
+		public string QuadGreenBrushSerialize
+		{
+			get { return BrushSerialization.ToString(QuadGreenBrush); }
+			set { QuadGreenBrush = BrushSerialization.FromString(value); }
+		}
+
+		// Line visibility toggles
+		[NinjaScriptProperty]
+		[Display(Name = "Show Stoch 2 Line", Order = 1, GroupName = "Visual - Line Toggles")]
+		public bool ShowStoch2Line { get; set; }
+
+		[NinjaScriptProperty]
+		[Display(Name = "Show Stoch 3 Line", Order = 2, GroupName = "Visual - Line Toggles")]
+		public bool ShowStoch3Line { get; set; }
+
+		// Stochastic line colors (editable)
+		[XmlIgnore]
+		[Display(Name = "Stoch 1 Color", Order = 1, GroupName = "Colors - Lines")]
+		public System.Windows.Media.Brush Stoch1Brush { get; set; }
+
+		[Browsable(false)]
+		public string Stoch1BrushSerialize
+		{
+			get { return BrushSerialization.ToString(Stoch1Brush); }
+			set { Stoch1Brush = BrushSerialization.FromString(value); }
+		}
+
+		[XmlIgnore]
+		[Display(Name = "Stoch 2 Color", Order = 2, GroupName = "Colors - Lines")]
+		public System.Windows.Media.Brush Stoch2Brush { get; set; }
+
+		[Browsable(false)]
+		public string Stoch2BrushSerialize
+		{
+			get { return BrushSerialization.ToString(Stoch2Brush); }
+			set { Stoch2Brush = BrushSerialization.FromString(value); }
+		}
+
+		[XmlIgnore]
+		[Display(Name = "Stoch 3 Color", Order = 3, GroupName = "Colors - Lines")]
+		public System.Windows.Media.Brush Stoch3Brush { get; set; }
+
+		[Browsable(false)]
+		public string Stoch3BrushSerialize
+		{
+			get { return BrushSerialization.ToString(Stoch3Brush); }
+			set { Stoch3Brush = BrushSerialization.FromString(value); }
+		}
+
+		[XmlIgnore]
+		[Display(Name = "Stoch 4 Color", Order = 4, GroupName = "Colors - Lines")]
+		public System.Windows.Media.Brush Stoch4Brush { get; set; }
+
+		[Browsable(false)]
+		public string Stoch4BrushSerialize
+		{
+			get { return BrushSerialization.ToString(Stoch4Brush); }
+			set { Stoch4Brush = BrushSerialization.FromString(value); }
+		}
+
+		// =========================
+		// Internals
+		// =========================
+
 		private Series<double> rawK1, smoothK1, dSeries1;
 		private Series<double> rawK2, smoothK2, dSeries2;
 		private Series<double> rawK3, smoothK3, dSeries3;
@@ -100,7 +219,7 @@ namespace NinjaTrader.NinjaScript.Indicators
 			if (State == State.SetDefaults)
 			{
 				Name = "QR";
-				Description = "Quad Rotation - 4 Stochastics Overlay (NT8.1.6.3 safe build: NO Draw.Line/Draw.Region).";
+				Description = "Quad Rotation - 4 Stochastics Overlay (editable colors + TV-style 20-80 zone fill + hide stoch 2/3 lines).";
 				IsOverlay = false;
 				Calculate = Calculate.OnBarClose;
 
@@ -116,21 +235,42 @@ namespace NinjaTrader.NinjaScript.Indicators
 
 				EnableAlerts = true;
 
-				AddPlot(Brushes.Gold,   "Stoch1D");
-				AddPlot(Brushes.Orange, "Stoch2D");
-				AddPlot(Brushes.Gray,   "Stoch3D");
-				AddPlot(Brushes.White,  "Stoch4D");
+				// Zone defaults (TV-like blue fill)
+				ShowZoneFill  = true;
+				ZoneOpacity   = 38; // 0-100
+				ZoneFillBrush = Brushes.DodgerBlue;
+
+				// Quad BG defaults (lighter)
+				QuadRedBrush     = Brushes.Red;
+				QuadGreenBrush   = Brushes.LimeGreen;
+				QuadRedOpacity   = 90;
+				QuadGreenOpacity = 90;
+
+				// Default line visibility
+				ShowStoch2Line = true;
+				ShowStoch3Line = true;
+
+				// Line color defaults
+				Stoch1Brush = Brushes.Gold;
+				Stoch2Brush = Brushes.Orange;
+				Stoch3Brush = Brushes.Gray;
+				Stoch4Brush = Brushes.White;
+
+				AddPlot(Stoch1Brush, "Stoch1D");
+				AddPlot(Stoch2Brush, "Stoch2D");
+				AddPlot(Stoch3Brush, "Stoch3D");
+				AddPlot(Stoch4Brush, "Stoch4D");
 
 				Plots[0].Width = 2;
 				Plots[1].Width = 1;
 				Plots[2].Width = 1;
 				Plots[3].Width = 3;
 
-				AddLine(Brushes.White, 80, "Overbought80");
-				AddLine(Brushes.White, 20, "Oversold20");
+				AddLine(Brushes.Firebrick, 80, "Overbought80");
+				AddLine(Brushes.Green, 20, "Oversold20");
 				AddLine(Brushes.White, 50, "Midline50");
-				AddLine(Brushes.White, 90, "ExtremeOB90");
-				AddLine(Brushes.White, 10, "ExtremeOS10");
+				AddLine(Brushes.Firebrick, 90, "ExtremeOB90");
+				AddLine(Brushes.Green, 10, "ExtremeOS10");
 			}
 			else if (State == State.DataLoaded)
 			{
@@ -166,40 +306,52 @@ namespace NinjaTrader.NinjaScript.Indicators
 				return;
 			}
 
+			// Apply user-selected line colors (so UI settings always win)
+			Plots[0].Brush = Stoch1Brush;
+			Plots[1].Brush = Stoch2Brush;
+			Plots[2].Brush = Stoch3Brush;
+			Plots[3].Brush = Stoch4Brush;
+
 			ComputeStochD(K1, 1, D1, rawK1, smoothK1, dSeries1, out double s1);
 			ComputeStochD(K2, 1, D2, rawK2, smoothK2, dSeries2, out double s2);
 			ComputeStochD(K3, 1, D3, rawK3, smoothK3, dSeries3, out double s3);
 			ComputeStochD(K4, SmoothK4, D4, rawK4, smoothK4Series, dSeries4, out double s4);
 
+			// Plot assignment (with visibility toggles)
 			Values[0][0] = s1;
-			Values[1][0] = s2;
-			Values[2][0] = s3;
+			Values[1][0] = ShowStoch2Line ? s2 : double.NaN;
+			Values[2][0] = ShowStoch3Line ? s3 : double.NaN;
 			Values[3][0] = s4;
 
-			// Base faint blue tint
-			BackBrushes[0] = new SolidColorBrush(Color.FromArgb(35, 30, 144, 255));
+			// Use INTERNAL %D series for previous values so logic is unchanged even when lines are hidden
+			double s1Prev = dSeries1[1];
+			double s2Prev = dSeries2[1];
+			double s3Prev = dSeries3[1];
+			double s4Prev = dSeries4[1];
 
-			// Sloping logic (matches your Pine intent)
-			bool s1Down = (s1 - Values[0][1]) < 0 && s1 >= 50;
-			bool s2Down = (s2 - Values[1][1]) < 0 && s2 >= 50;
-			bool s3Down = (s3 - Values[2][1]) <= 0 && s3 > 80;
-			bool s4Down = (s4 - Values[3][1]) <= 0 && s4 > 80;
+			// Sloping logic
+			bool s1Down = (s1 - s1Prev) < 0 && s1 >= 50;
+			bool s2Down = (s2 - s2Prev) < 0 && s2 >= 50;
+			bool s3Down = (s3 - s3Prev) <= 0 && s3 > 80;
+			bool s4Down = (s4 - s4Prev) <= 0 && s4 > 80;
 
-			bool s1Up = (s1 - Values[0][1]) > 0 && s1 <= 50;
-			bool s2Up = (s2 - Values[1][1]) > 0 && s2 <= 50;
-			bool s3Up = (s3 - Values[2][1]) >= 0 && s3 < 20;
-			bool s4Up = (s4 - Values[3][1]) >= 0 && s4 < 20;
+			bool s1Up = (s1 - s1Prev) > 0 && s1 <= 50;
+			bool s2Up = (s2 - s2Prev) > 0 && s2 <= 50;
+			bool s3Up = (s3 - s3Prev) >= 0 && s3 < 20;
+			bool s4Up = (s4 - s4Prev) >= 0 && s4 < 20;
 
 			int downCount = (s1Down ? 1 : 0) + (s2Down ? 1 : 0) + (s3Down ? 1 : 0) + (s4Down ? 1 : 0);
 			int upCount   = (s1Up ? 1 : 0) + (s2Up ? 1 : 0) + (s3Up ? 1 : 0) + (s4Up ? 1 : 0);
 
-			bool bgRed = downCount >= MinCount;
-			bool bgGreen = upCount >= MinCount;
+			bool bgRed   = downCount >= MinCount;
+			bool bgGreen = upCount   >= MinCount;
+
+			BackBrushes[0] = null;
 
 			if (bgRed)
-				BackBrushes[0] = new SolidColorBrush(Color.FromArgb(90, 255, 0, 0));
+				BackBrushes[0] = WithOpacity(QuadRedBrush, QuadRedOpacity);
 			else if (bgGreen)
-				BackBrushes[0] = new SolidColorBrush(Color.FromArgb(90, 0, 255, 0));
+				BackBrushes[0] = WithOpacity(QuadGreenBrush, QuadGreenOpacity);
 
 			if (EnableAlerts)
 			{
@@ -211,7 +363,7 @@ namespace NinjaTrader.NinjaScript.Indicators
 			prevBgRed = bgRed;
 			prevBgGreen = bgGreen;
 
-			// ABCD shield counters (barssince equivalents)
+			// ABCD shield counters
 			if (s4 <= 90) barsSinceStoch4Le90 = 0; else barsSinceStoch4Le90++;
 			if (s4 >= 10) barsSinceStoch4Ge10 = 0; else barsSinceStoch4Ge10++;
 
@@ -254,8 +406,8 @@ namespace NinjaTrader.NinjaScript.Indicators
 			prevSuperUp = superUp;
 
 			// Continuation logic
-			bool s1CrossAbove80 = CrossAbove(Values[0], 80, 1);
-			bool s1CrossBelow20 = CrossBelow(Values[0], 20, 1);
+			bool s1CrossAbove80 = CrossAbove(dSeries1, 80, 1);
+			bool s1CrossBelow20 = CrossBelow(dSeries1, 20, 1);
 
 			bool s4Below30 = s4 < 30;
 			bool s4Above70 = s4 > 70;
@@ -264,8 +416,8 @@ namespace NinjaTrader.NinjaScript.Indicators
 			int bullShieldCount = 0;
 			for (int i = 0; i < 10 && CurrentBar - i >= 0; i++)
 			{
-				if (Values[3][i] < 10) bearShieldCount++;
-				if (Values[3][i] > 90) bullShieldCount++;
+				if (dSeries4[i] < 10) bearShieldCount++;
+				if (dSeries4[i] > 90) bullShieldCount++;
 			}
 
 			bool bearCont = s4Below30 && s1CrossAbove80 && bearShieldCount >= 3;
@@ -289,6 +441,49 @@ namespace NinjaTrader.NinjaScript.Indicators
 			prevBullCont = bullCont;
 		}
 
+		// TV-style filled 20-80 zone (NO ToDxBrush dependency)
+		protected override void OnRender(ChartControl chartControl, ChartScale chartScale)
+		{
+			base.OnRender(chartControl, chartScale);
+
+			if (!ShowZoneFill || ZoneFillBrush == null || chartControl == null || chartScale == null || ChartPanel == null)
+				return;
+
+			float y80 = chartScale.GetYByValue(80);
+			float y20 = chartScale.GetYByValue(20);
+
+			float top = Math.Min(y80, y20);
+			float bottom = Math.Max(y80, y20);
+			float height = Math.Max(1, bottom - top);
+
+			float x = ChartPanel.X;
+			float width = ChartPanel.W;
+
+			System.Windows.Media.Brush wpf = WithOpacity(ZoneFillBrush, ZoneOpacity);
+			if (wpf == null)
+				return;
+
+			// Safe: only SolidColorBrush supported here
+			var sb = wpf as System.Windows.Media.SolidColorBrush;
+			if (sb == null)
+				return;
+
+			System.Windows.Media.Color mc = sb.Color;
+
+			var dxColor = new SharpDX.Color4(
+				mc.R / 255f,
+				mc.G / 255f,
+				mc.B / 255f,
+				mc.A / 255f
+			);
+
+			using (var dxBrush = new SharpDX.Direct2D1.SolidColorBrush(RenderTarget, dxColor))
+			{
+				var rect = new SharpDX.RectangleF(x, top, width, height);
+				RenderTarget.FillRectangle(rect, dxBrush);
+			}
+		}
+
 		private void ComputeStochD(int kLen, int smoothKLen, int dLen,
 			Series<double> rawK, Series<double> smoothK, Series<double> dSeries,
 			out double dValue)
@@ -305,5 +500,97 @@ namespace NinjaTrader.NinjaScript.Indicators
 
 			dValue = dSeries[0];
 		}
+
+		private System.Windows.Media.Brush WithOpacity(System.Windows.Media.Brush b, int opacityPct0to100)
+		{
+			if (b == null)
+				return null;
+
+			var sb = b as System.Windows.Media.SolidColorBrush;
+			if (sb == null)
+				return b;
+
+			int pct = Math.Max(0, Math.Min(100, opacityPct0to100));
+			byte a = (byte)Math.Max(0, Math.Min(255, (int)Math.Round(255.0 * (pct / 100.0))));
+			System.Windows.Media.Color c = sb.Color;
+
+			var nb = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(a, c.R, c.G, c.B));
+			nb.Freeze();
+			return nb;
+		}
+	}
+
+	internal static class BrushSerialization
+	{
+		public static string ToString(System.Windows.Media.Brush b)
+		{
+			if (b == null) return null;
+			var bc = new BrushConverter();
+			return bc.ConvertToString(b);
+		}
+
+		public static System.Windows.Media.Brush FromString(string s)
+		{
+			if (string.IsNullOrEmpty(s)) return null;
+			var bc = new BrushConverter();
+			return (System.Windows.Media.Brush)bc.ConvertFromString(s);
+		}
 	}
 }
+
+#region NinjaScript generated code. Neither change nor remove.
+
+namespace NinjaTrader.NinjaScript.Indicators
+{
+	public partial class Indicator : NinjaTrader.Gui.NinjaScript.IndicatorRenderBase
+	{
+		private QR[] cacheQR;
+		public QR QR(int minCount, bool enableAlerts, int k1, int d1, int k2, int d2, int k3, int d3, int k4, int d4, int smoothK4, int abcdBars90, int abcdBars10, bool showZoneFill, int zoneOpacity, int quadRedOpacity, int quadGreenOpacity, bool showStoch2Line, bool showStoch3Line)
+		{
+			return QR(Input, minCount, enableAlerts, k1, d1, k2, d2, k3, d3, k4, d4, smoothK4, abcdBars90, abcdBars10, showZoneFill, zoneOpacity, quadRedOpacity, quadGreenOpacity, showStoch2Line, showStoch3Line);
+		}
+
+		public QR QR(ISeries<double> input, int minCount, bool enableAlerts, int k1, int d1, int k2, int d2, int k3, int d3, int k4, int d4, int smoothK4, int abcdBars90, int abcdBars10, bool showZoneFill, int zoneOpacity, int quadRedOpacity, int quadGreenOpacity, bool showStoch2Line, bool showStoch3Line)
+		{
+			if (cacheQR != null)
+				for (int idx = 0; idx < cacheQR.Length; idx++)
+					if (cacheQR[idx] != null && cacheQR[idx].MinCount == minCount && cacheQR[idx].EnableAlerts == enableAlerts && cacheQR[idx].K1 == k1 && cacheQR[idx].D1 == d1 && cacheQR[idx].K2 == k2 && cacheQR[idx].D2 == d2 && cacheQR[idx].K3 == k3 && cacheQR[idx].D3 == d3 && cacheQR[idx].K4 == k4 && cacheQR[idx].D4 == d4 && cacheQR[idx].SmoothK4 == smoothK4 && cacheQR[idx].AbcdBars90 == abcdBars90 && cacheQR[idx].AbcdBars10 == abcdBars10 && cacheQR[idx].ShowZoneFill == showZoneFill && cacheQR[idx].ZoneOpacity == zoneOpacity && cacheQR[idx].QuadRedOpacity == quadRedOpacity && cacheQR[idx].QuadGreenOpacity == quadGreenOpacity && cacheQR[idx].ShowStoch2Line == showStoch2Line && cacheQR[idx].ShowStoch3Line == showStoch3Line && cacheQR[idx].EqualsInput(input))
+						return cacheQR[idx];
+			return CacheIndicator<QR>(new QR(){ MinCount = minCount, EnableAlerts = enableAlerts, K1 = k1, D1 = d1, K2 = k2, D2 = d2, K3 = k3, D3 = d3, K4 = k4, D4 = d4, SmoothK4 = smoothK4, AbcdBars90 = abcdBars90, AbcdBars10 = abcdBars10, ShowZoneFill = showZoneFill, ZoneOpacity = zoneOpacity, QuadRedOpacity = quadRedOpacity, QuadGreenOpacity = quadGreenOpacity, ShowStoch2Line = showStoch2Line, ShowStoch3Line = showStoch3Line }, input, ref cacheQR);
+		}
+	}
+}
+
+namespace NinjaTrader.NinjaScript.MarketAnalyzerColumns
+{
+	public partial class MarketAnalyzerColumn : MarketAnalyzerColumnBase
+	{
+		public Indicators.QR QR(int minCount, bool enableAlerts, int k1, int d1, int k2, int d2, int k3, int d3, int k4, int d4, int smoothK4, int abcdBars90, int abcdBars10, bool showZoneFill, int zoneOpacity, int quadRedOpacity, int quadGreenOpacity, bool showStoch2Line, bool showStoch3Line)
+		{
+			return indicator.QR(Input, minCount, enableAlerts, k1, d1, k2, d2, k3, d3, k4, d4, smoothK4, abcdBars90, abcdBars10, showZoneFill, zoneOpacity, quadRedOpacity, quadGreenOpacity, showStoch2Line, showStoch3Line);
+		}
+
+		public Indicators.QR QR(ISeries<double> input , int minCount, bool enableAlerts, int k1, int d1, int k2, int d2, int k3, int d3, int k4, int d4, int smoothK4, int abcdBars90, int abcdBars10, bool showZoneFill, int zoneOpacity, int quadRedOpacity, int quadGreenOpacity, bool showStoch2Line, bool showStoch3Line)
+		{
+			return indicator.QR(input, minCount, enableAlerts, k1, d1, k2, d2, k3, d3, k4, d4, smoothK4, abcdBars90, abcdBars10, showZoneFill, zoneOpacity, quadRedOpacity, quadGreenOpacity, showStoch2Line, showStoch3Line);
+		}
+	}
+}
+
+namespace NinjaTrader.NinjaScript.Strategies
+{
+	public partial class Strategy : NinjaTrader.Gui.NinjaScript.StrategyRenderBase
+	{
+		public Indicators.QR QR(int minCount, bool enableAlerts, int k1, int d1, int k2, int d2, int k3, int d3, int k4, int d4, int smoothK4, int abcdBars90, int abcdBars10, bool showZoneFill, int zoneOpacity, int quadRedOpacity, int quadGreenOpacity, bool showStoch2Line, bool showStoch3Line)
+		{
+			return indicator.QR(Input, minCount, enableAlerts, k1, d1, k2, d2, k3, d3, k4, d4, smoothK4, abcdBars90, abcdBars10, showZoneFill, zoneOpacity, quadRedOpacity, quadGreenOpacity, showStoch2Line, showStoch3Line);
+		}
+
+		public Indicators.QR QR(ISeries<double> input , int minCount, bool enableAlerts, int k1, int d1, int k2, int d2, int k3, int d3, int k4, int d4, int smoothK4, int abcdBars90, int abcdBars10, bool showZoneFill, int zoneOpacity, int quadRedOpacity, int quadGreenOpacity, bool showStoch2Line, bool showStoch3Line)
+		{
+			return indicator.QR(input, minCount, enableAlerts, k1, d1, k2, d2, k3, d3, k4, d4, smoothK4, abcdBars90, abcdBars10, showZoneFill, zoneOpacity, quadRedOpacity, quadGreenOpacity, showStoch2Line, showStoch3Line);
+		}
+	}
+}
+
+#endregion
