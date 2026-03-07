@@ -2,7 +2,6 @@
 using System;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
-using System.Xml.Serialization;
 
 using NinjaTrader.Cbi;
 using NinjaTrader.Data;
@@ -10,41 +9,35 @@ using NinjaTrader.Gui.NinjaScript;
 using NinjaTrader.NinjaScript;
 #endregion
 
+// NOTE:
+// - This file intentionally does NOT include any "NinjaScript generated code" block.
+//   NinjaTrader will generate that automatically.
+// - Stochastic parameters are hard-coded (static) as requested.
+
 namespace NinjaTrader.NinjaScript.Strategies
 {
 	public class QR_RotationStrategy : Strategy
 	{
 		// =========================
-		// Fixed Stoch settings (static / non-editable)
+		// User inputs
 		// =========================
-		private const int K1 = 9,  D1 = 3;
-		private const int K2 = 14, D2 = 3;
-		private const int K3 = 40, D3 = 4;
-		private const int K4 = 60, D4 = 10;
-		private const int SmoothK4 = 1;
 
-		// =========================
-		// Inputs (editable)
-		// =========================
+		public enum QREntryTiming
+		{
+			EnterOnSignalBarClose = 0,  // "as it fires" (on the bar that triggers the rotation; order is submitted at bar close)
+			EnterNextBarOpen      = 1   // next-bar confirmation timing
+		}
 
 		[NinjaScriptProperty]
-		[Range(1, 4)]
-		[Display(Name = "Min # of Stochastics for Rotation", Order = 1, GroupName = "Signals")]
-		public int MinCount { get; set; }
+		[Display(Name = "Entry timing", Order = 1, GroupName = "Execution")]
+		public QREntryTiming EntryTiming { get; set; }
 
-		// Execution
 		[NinjaScriptProperty]
-		[Display(Name = "Only enter on NEW rotation (edge trigger)", Order = 1, GroupName = "Execution")]
+		[Display(Name = "Only enter on NEW rotation (edge trigger)", Order = 2, GroupName = "Execution")]
 		public bool OnlyEnterOnNewRotation { get; set; }
 
-		public enum EntryTimingMode { NextBarConfirm, SameBarAsSignal }
 		[NinjaScriptProperty]
-		[Display(Name = "Entry Timing", Order = 2, GroupName = "Execution")]
-		public EntryTimingMode EntryTiming { get; set; }
-
-		// Risk
-		[NinjaScriptProperty]
-		[Range(1, 20)]
+		[Range(1, 10)]
 		[Display(Name = "Contracts (MES)", Order = 1, GroupName = "Risk")]
 		public int Contracts { get; set; }
 
@@ -58,20 +51,41 @@ namespace NinjaTrader.NinjaScript.Strategies
 		[Display(Name = "Take Profit (ticks)", Order = 3, GroupName = "Risk")]
 		public int ProfitTargetTicks { get; set; }
 
-		// Exits
 		[NinjaScriptProperty]
 		[Display(Name = "Use Rotation Exit (Stoch4 other side + curve)", Order = 1, GroupName = "Exits")]
 		public bool UseRotationExit { get; set; }
 
 		[NinjaScriptProperty]
 		[Range(1, 99)]
-		[Display(Name = "Exit Long at >= (e.g., 80)", Order = 2, GroupName = "Exits")]
+		[Display(Name = "Exit Long at ≥ (e.g., 80)", Order = 2, GroupName = "Exits")]
 		public int ExitLongAt { get; set; }
 
 		[NinjaScriptProperty]
 		[Range(1, 99)]
-		[Display(Name = "Exit Short at <= (e.g., 20)", Order = 3, GroupName = "Exits")]
+		[Display(Name = "Exit Short at ≤ (e.g., 20)", Order = 3, GroupName = "Exits")]
 		public int ExitShortAt { get; set; }
+
+		// Optional: keep MinCount adjustable (logic-level input, not stoch parameters)
+		[NinjaScriptProperty]
+		[Range(1, 4)]
+		[Display(Name = "Min # of Stochastics for Rotation", Order = 1, GroupName = "Signals")]
+		public int MinCount { get; set; }
+
+		// =========================
+		// Hard-coded stochastic settings (STATIC)
+		// =========================
+		private const int K1 = 9;
+		private const int D1 = 3;
+
+		private const int K2 = 14;
+		private const int D2 = 3;
+
+		private const int K3 = 40;
+		private const int D3 = 4;
+
+		private const int K4 = 60;
+		private const int D4 = 10;
+		private const int SmoothK4 = 1;
 
 		// =========================
 		// Internals
@@ -81,8 +95,8 @@ namespace NinjaTrader.NinjaScript.Strategies
 		private Series<double> rawK3, smoothK3, dSeries3;
 		private Series<double> rawK4, smoothK4Series, dSeries4;
 
-		private bool prevGreenRotation;
-		private bool prevRedRotation;
+		private bool prevBgGreen;
+		private bool prevBgRed;
 
 		private bool pendingLong;
 		private bool pendingShort;
@@ -91,32 +105,38 @@ namespace NinjaTrader.NinjaScript.Strategies
 		{
 			if (State == State.SetDefaults)
 			{
-				Name = "QR_RotationStrategy";
-				Description = "Enters long on Green Quad Rotation and short on Red Quad Rotation (based on 4 fixed stochastics).";
-				Calculate = Calculate.OnBarClose;
-
-				// Signals
-				MinCount = 4;
-
-				// Execution
-				OnlyEnterOnNewRotation = true;
-				EntryTiming = EntryTimingMode.NextBarConfirm;
-
-				// Risk
-				Contracts = 1;
-				StopLossTicks = 20;
-				ProfitTargetTicks = 40;
-
-				// Exits
-				UseRotationExit = true;
-				ExitLongAt = 80;
-				ExitShortAt = 20;
-
-				// basic safety defaults
-				EntriesPerDirection = 1;
-				EntryHandling = EntryHandling.AllEntries;
+				Name					= "QR_RotationStrategy";
+				Description				= "Strategy based on Quad Rotation (4 stochastics). Enters long on GREEN rotation and short on RED rotation.";
+				Calculate				= Calculate.OnBarClose;
+				EntriesPerDirection		= 1;
+				EntryHandling			= EntryHandling.AllEntries;
 				IsExitOnSessionCloseStrategy = true;
-				ExitOnSessionCloseSeconds = 30;
+				ExitOnSessionCloseSeconds	 = 30;
+				IsInstantiatedOnEachOptimizationIteration = false;
+
+				// Defaults
+				EntryTiming				= QREntryTiming.EnterNextBarOpen;
+				OnlyEnterOnNewRotation	= true;
+
+				Contracts				= 1;
+				StopLossTicks			= 20;
+				ProfitTargetTicks		= 40;
+
+				UseRotationExit			= true;
+				ExitLongAt				= 80;
+				ExitShortAt				= 20;
+
+				MinCount				= 4;
+			}
+			else if (State == State.Configure)
+			{
+				// Attach fixed SL/TP (ticks)
+				// (These apply to the named entry signals below.)
+				SetStopLoss("QR_Long",  CalculationMode.Ticks, StopLossTicks, false);
+				SetStopLoss("QR_Short", CalculationMode.Ticks, StopLossTicks, false);
+
+				SetProfitTarget("QR_Long",  CalculationMode.Ticks, ProfitTargetTicks);
+				SetProfitTarget("QR_Short", CalculationMode.Ticks, ProfitTargetTicks);
 			}
 			else if (State == State.DataLoaded)
 			{
@@ -135,6 +155,12 @@ namespace NinjaTrader.NinjaScript.Strategies
 				rawK4 = new Series<double>(this);
 				smoothK4Series = new Series<double>(this);
 				dSeries4 = new Series<double>(this);
+
+				prevBgGreen = false;
+				prevBgRed   = false;
+
+				pendingLong = false;
+				pendingShort = false;
 			}
 		}
 
@@ -143,23 +169,19 @@ namespace NinjaTrader.NinjaScript.Strategies
 			if (CurrentBar < 2)
 				return;
 
-			// Attach bracket orders
-			SetStopLoss(CalculationMode.Ticks, StopLossTicks);
-			SetProfitTarget(CalculationMode.Ticks, ProfitTargetTicks);
+			// 1) Compute the 4 %D values (same math as the indicator)
+			double s1, s2, s3, s4;
+			ComputeStochD(K1, 1, D1, rawK1, smoothK1, dSeries1, out s1);
+			ComputeStochD(K2, 1, D2, rawK2, smoothK2, dSeries2, out s2);
+			ComputeStochD(K3, 1, D3, rawK3, smoothK3, dSeries3, out s3);
+			ComputeStochD(K4, SmoothK4, D4, rawK4, smoothK4Series, dSeries4, out s4);
 
-			// Compute stoch %D values (fixed parameters)
-			double s1 = ComputeStochD(K1, 1, D1, rawK1, smoothK1, dSeries1);
-			double s2 = ComputeStochD(K2, 1, D2, rawK2, smoothK2, dSeries2);
-			double s3 = ComputeStochD(K3, 1, D3, rawK3, smoothK3, dSeries3);
-			double s4 = ComputeStochD(K4, SmoothK4, D4, rawK4, smoothK4Series, dSeries4);
-
-			// Previous values from internal series
 			double s1Prev = dSeries1[1];
 			double s2Prev = dSeries2[1];
 			double s3Prev = dSeries3[1];
 			double s4Prev = dSeries4[1];
 
-			// Quad rotation slope logic (same as indicator)
+			// 2) Rotation slope logic (matches the indicator's intent)
 			bool s1Down = (s1 - s1Prev) < 0 && s1 >= 50;
 			bool s2Down = (s2 - s2Prev) < 0 && s2 >= 50;
 			bool s3Down = (s3 - s3Prev) <= 0 && s3 > 80;
@@ -171,77 +193,108 @@ namespace NinjaTrader.NinjaScript.Strategies
 			bool s4Up = (s4 - s4Prev) >= 0 && s4 < 20;
 
 			int downCount = (s1Down ? 1 : 0) + (s2Down ? 1 : 0) + (s3Down ? 1 : 0) + (s4Down ? 1 : 0);
-			int upCount   = (s1Up   ? 1 : 0) + (s2Up   ? 1 : 0) + (s3Up   ? 1 : 0) + (s4Up   ? 1 : 0);
+			int upCount   = (s1Up ? 1 : 0) + (s2Up ? 1 : 0) + (s3Up ? 1 : 0) + (s4Up ? 1 : 0);
 
-			bool redRotation   = downCount >= MinCount;
-			bool greenRotation = upCount   >= MinCount;
+			bool bgRed   = downCount >= MinCount;
+			bool bgGreen = upCount   >= MinCount;
 
-			// Edge trigger
-			bool newGreen = greenRotation && (!prevGreenRotation);
-			bool newRed   = redRotation   && (!prevRedRotation);
+			bool newGreen = bgGreen && (!prevBgGreen);
+			bool newRed   = bgRed   && (!prevBgRed);
 
-			if (!OnlyEnterOnNewRotation)
+			// 3) Execute pending next-bar entries (if any)
+			if (EntryTiming == QREntryTiming.EnterNextBarOpen)
 			{
-				newGreen = greenRotation;
-				newRed   = redRotation;
-			}
-
-			// Reset opposite pending
-			if (newGreen) pendingShort = false;
-			if (newRed)   pendingLong  = false;
-
-			// --- Entries ---
-			if (Position.MarketPosition == MarketPosition.Flat)
-			{
-				if (EntryTiming == EntryTimingMode.SameBarAsSignal)
+				// We submit the order at the open of THIS bar (after the prior bar set pending flags)
+				// Since we're Calculate.OnBarClose, we approximate "open of this bar" by using IsFirstBarOfSession check? No.
+				// In OnBarClose mode, orders fire after bar close; this still gives you a clean "next bar" behavior in backtests.
+				if (pendingLong)
 				{
-					if (newGreen) EnterLong(Contracts, "QR_Long");
-					if (newRed)   EnterShort(Contracts, "QR_Short");
+					TryEnterLong();
+					pendingLong = false;
 				}
-				else
+				if (pendingShort)
 				{
-					// Next bar confirm: arm on signal bar, fire on next bar open (historical = next bar)
-					if (newGreen) pendingLong = true;
-					if (newRed)   pendingShort = true;
-
-					if (pendingLong && BarsSinceEntryExecution() > 0)
-					{
-						EnterLong(Contracts, "QR_Long");
-						pendingLong = false;
-					}
-					if (pendingShort && BarsSinceEntryExecution() > 0)
-					{
-						EnterShort(Contracts, "QR_Short");
-						pendingShort = false;
-					}
+					TryEnterShort();
+					pendingShort = false;
 				}
 			}
 
-			// --- Optional rotation-based exits using Stoch4 ---
+			// 4) Entry signals
+			bool allowEnterLong  = bgGreen;
+			bool allowEnterShort = bgRed;
+
+			if (OnlyEnterOnNewRotation)
+			{
+				allowEnterLong  = newGreen;
+				allowEnterShort = newRed;
+			}
+
+			if (EntryTiming == QREntryTiming.EnterOnSignalBarClose)
+			{
+				if (allowEnterLong)
+					TryEnterLong();
+				if (allowEnterShort)
+					TryEnterShort();
+			}
+			else // EnterNextBarOpen (pending)
+			{
+				if (allowEnterLong)
+					pendingLong = true;
+				if (allowEnterShort)
+					pendingShort = true;
+			}
+
+			// 5) Optional Rotation Exit (Stoch4 reaches other side AND curves back)
 			if (UseRotationExit)
 			{
-				// "Other side of range and starts to curve"
+				// "curve back" logic:
+				// - Long: when s4 is high (≥ ExitLongAt) and starts to slope down
+				// - Short: when s4 is low (≤ ExitShortAt) and starts to slope up
 				bool s4CurvingDown = (s4 - s4Prev) < 0;
 				bool s4CurvingUp   = (s4 - s4Prev) > 0;
 
 				if (Position.MarketPosition == MarketPosition.Long)
 				{
 					if (s4 >= ExitLongAt && s4CurvingDown)
-						ExitLong("QR_RotExit", "QR_Long");
+						ExitLong("QR_RotationExit_Long", "QR_Long");
 				}
 				else if (Position.MarketPosition == MarketPosition.Short)
 				{
 					if (s4 <= ExitShortAt && s4CurvingUp)
-						ExitShort("QR_RotExit", "QR_Short");
+						ExitShort("QR_RotationExit_Short", "QR_Short");
 				}
 			}
 
-			prevGreenRotation = greenRotation;
-			prevRedRotation   = redRotation;
+			prevBgGreen = bgGreen;
+			prevBgRed   = bgRed;
 		}
 
-		private double ComputeStochD(int kLen, int smoothKLen, int dLen,
-			Series<double> rawK, Series<double> smoothK, Series<double> dSeries)
+		private void TryEnterLong()
+		{
+			if (Position.MarketPosition == MarketPosition.Long)
+				return;
+
+			// If currently short, reverse (optional). Here we just exit and re-enter.
+			if (Position.MarketPosition == MarketPosition.Short)
+				ExitShort("QR_FlipToLong", "QR_Short");
+
+			EnterLong(Contracts, "QR_Long");
+		}
+
+		private void TryEnterShort()
+		{
+			if (Position.MarketPosition == MarketPosition.Short)
+				return;
+
+			if (Position.MarketPosition == MarketPosition.Long)
+				ExitLong("QR_FlipToShort", "QR_Long");
+
+			EnterShort(Contracts, "QR_Short");
+		}
+
+		private void ComputeStochD(int kLen, int smoothKLen, int dLen,
+			Series<double> rawK, Series<double> smoothK, Series<double> dSeries,
+			out double dValue)
 		{
 			double hh = MAX(High, kLen)[0];
 			double ll = MIN(Low, kLen)[0];
@@ -250,56 +303,14 @@ namespace NinjaTrader.NinjaScript.Strategies
 			double k = (Math.Abs(denom) < 1e-10) ? 50.0 : 100.0 * (Close[0] - ll) / denom;
 			rawK[0] = k;
 
-			smoothK[0] = SMA(rawK, smoothKLen)[0];
-			dSeries[0] = SMA(smoothK, dLen)[0];
+			// Guard against smoothKLen==0 (shouldn't happen)
+			int sk = Math.Max(1, smoothKLen);
+			int dl = Math.Max(1, dLen);
 
-			return dSeries[0];
+			smoothK[0] = SMA(rawK, sk)[0];
+			dSeries[0] = SMA(smoothK, dl)[0];
+
+			dValue = dSeries[0];
 		}
 	}
 }
-
-#region NinjaScript generated code. Neither change nor remove.
-
-namespace NinjaTrader.NinjaScript.Strategies
-{
-	public partial class Strategy : NinjaTrader.Gui.NinjaScript.StrategyRenderBase
-	{
-		private QR_RotationStrategy[] cacheQR_RotationStrategy;
-		public QR_RotationStrategy QR_RotationStrategy(int minCount, bool onlyEnterOnNewRotation, QR_RotationStrategy.EntryTimingMode entryTiming, int contracts, int stopLossTicks, int profitTargetTicks, bool useRotationExit, int exitLongAt, int exitShortAt)
-		{
-			return QR_RotationStrategy(Input, minCount, onlyEnterOnNewRotation, entryTiming, contracts, stopLossTicks, profitTargetTicks, useRotationExit, exitLongAt, exitShortAt);
-		}
-
-		public QR_RotationStrategy QR_RotationStrategy(ISeries<double> input, int minCount, bool onlyEnterOnNewRotation, QR_RotationStrategy.EntryTimingMode entryTiming, int contracts, int stopLossTicks, int profitTargetTicks, bool useRotationExit, int exitLongAt, int exitShortAt)
-		{
-			if (cacheQR_RotationStrategy != null)
-				for (int idx = 0; idx < cacheQR_RotationStrategy.Length; idx++)
-					if (cacheQR_RotationStrategy[idx] != null
-						&& cacheQR_RotationStrategy[idx].MinCount == minCount
-						&& cacheQR_RotationStrategy[idx].OnlyEnterOnNewRotation == onlyEnterOnNewRotation
-						&& cacheQR_RotationStrategy[idx].EntryTiming == entryTiming
-						&& cacheQR_RotationStrategy[idx].Contracts == contracts
-						&& cacheQR_RotationStrategy[idx].StopLossTicks == stopLossTicks
-						&& cacheQR_RotationStrategy[idx].ProfitTargetTicks == profitTargetTicks
-						&& cacheQR_RotationStrategy[idx].UseRotationExit == useRotationExit
-						&& cacheQR_RotationStrategy[idx].ExitLongAt == exitLongAt
-						&& cacheQR_RotationStrategy[idx].ExitShortAt == exitShortAt
-						&& cacheQR_RotationStrategy[idx].EqualsInput(input))
-						return cacheQR_RotationStrategy[idx];
-			return CacheStrategy<QR_RotationStrategy>(new QR_RotationStrategy()
-			{
-				MinCount = minCount,
-				OnlyEnterOnNewRotation = onlyEnterOnNewRotation,
-				EntryTiming = entryTiming,
-				Contracts = contracts,
-				StopLossTicks = stopLossTicks,
-				ProfitTargetTicks = profitTargetTicks,
-				UseRotationExit = useRotationExit,
-				ExitLongAt = exitLongAt,
-				ExitShortAt = exitShortAt
-			}, input, ref cacheQR_RotationStrategy);
-		}
-	}
-}
-
-#endregion
