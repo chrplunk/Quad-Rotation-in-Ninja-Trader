@@ -6,25 +6,27 @@ using System.Windows.Media;
 using System.Xml.Serialization;
 
 using NinjaTrader.Data;
+using NinjaTrader.Gui.Chart;
 using NinjaTrader.NinjaScript;
 using NinjaTrader.NinjaScript.DrawingTools;
 #endregion
 
 // QR (Indicator) - NT 8.1.6.3 friendly build
-// - NO SharpDX (avoids Brush/Color ambiguity + ToDxBrush issues)
-// - TV-style 20–80 zone fill via Draw.Rectangle (barsAgo overload) using ONE updating tag
-//   IMPORTANT: In this NT build the Draw.Rectangle signature is (outlineBrush, areaBrush, width).
-//   So we pass outline = null and area = fill.
-// - Quad rotation background coloring (editable colors/opacities)
-// - ABCD shield "+++++" markers (TradingView shape.cross equivalent) at top/bottom
-// - SUPER arrows (when MinCount != 4 and all 4 align)
-// - Zingers / warning crosses (your Pine section 9) implemented EXACTLY:
-//    bearishZinger = (Stoch4 < 30) AND (Stoch1 crosses ABOVE 80) AND (Stoch4 < 10 in >= 3 of last 10 bars)
-//    bullishZinger = (Stoch4 > 70) AND (Stoch1 crosses BELOW 20) AND (Stoch4 > 90 in >= 3 of last 10 bars)
-// - Optional hide Stoch2/Stoch3 plots visually (logic unchanged)
+// What this version does (per your request):
+// 1) Keeps the original TradingView-style BLUE fill between 20 and 80.
+// 2) Adds "+++++" warnings when Stoch4 is PEGGED:
+//      - Above/at 90  (green +++++)
+//      - Below/at 10  (red +++++)
+//    AND also supports your original "shield" logic (stuck above 90 for AbcdBars90 bars, stuck below 10 for AbcdBars10 bars).
+//    Net: you'll see the +++++ immediately on peg, and the shield condition continues as long as it remains pegged.
+// 3) Adds Zinger vertical lines (already requested/used):
+//      bearishZinger = (Stoch4 < 30) AND (Stoch1 crosses ABOVE 80) AND (Stoch4 < 10 in >= 3 of last 10 bars)
+//      bullishZinger = (Stoch4 > 70) AND (Stoch1 crosses BELOW 20) AND (Stoch4 > 90 in >= 3 of last 10 bars)
+// 4) Keeps your quad-rotation background shading and editable colors/opacities.
+// 5) Still supports hiding Stoch2/Stoch3 visually without breaking slope logic.
 //
 // IMPORTANT:
-// Do NOT paste any "NinjaScript generated code" block. NT regenerates that automatically.
+// Paste ONLY this indicator code into QR.cs (Ctrl+A -> Delete -> Paste). Do NOT paste any "NinjaScript generated code" block.
 
 namespace NinjaTrader.NinjaScript.Indicators
 {
@@ -92,7 +94,7 @@ namespace NinjaTrader.NinjaScript.Indicators
 		[Display(Name = "Smoothing (Stochastic 4)", Order = 3, GroupName = "Stoch 4")]
 		public int SmoothK4 { get; set; }
 
-		// ABCD shield
+		// ABCD shield (your original sensitivity inputs)
 		[NinjaScriptProperty]
 		[Range(1, 500)]
 		[Display(Name = "Bars Since Above 90 (Long)", Order = 1, GroupName = "ABCD Shield")]
@@ -107,15 +109,7 @@ namespace NinjaTrader.NinjaScript.Indicators
 		// Inputs (visuals / colors)
 		// =========================
 
-		[NinjaScriptProperty]
-		[Display(Name = "Show Stoch 2 Line", Order = 1, GroupName = "Visual - Line Toggles")]
-		public bool ShowStoch2Line { get; set; }
-
-		[NinjaScriptProperty]
-		[Display(Name = "Show Stoch 3 Line", Order = 2, GroupName = "Visual - Line Toggles")]
-		public bool ShowStoch3Line { get; set; }
-
-		// 20–80 zone fill
+		// TradingView-style filled 20-80 zone
 		[NinjaScriptProperty]
 		[Display(Name = "Show 20-80 Zone Fill", Order = 1, GroupName = "Colors - Zone")]
 		public bool ShowZoneFill { get; set; }
@@ -136,7 +130,7 @@ namespace NinjaTrader.NinjaScript.Indicators
 			set { ZoneFillBrush = BrushSerialization.FromString(value); }
 		}
 
-		// Quad rotation BG
+		// Quad rotation background colors (editable)
 		[NinjaScriptProperty]
 		[Range(0, 100)]
 		[Display(Name = "Quad RED Opacity (0-100)", Order = 1, GroupName = "Colors - Quad BG")]
@@ -169,7 +163,16 @@ namespace NinjaTrader.NinjaScript.Indicators
 			set { QuadGreenBrush = BrushSerialization.FromString(value); }
 		}
 
-		// Plot colors
+		// Line visibility toggles
+		[NinjaScriptProperty]
+		[Display(Name = "Show Stoch 2 Line", Order = 1, GroupName = "Visual - Line Toggles")]
+		public bool ShowStoch2Line { get; set; }
+
+		[NinjaScriptProperty]
+		[Display(Name = "Show Stoch 3 Line", Order = 2, GroupName = "Visual - Line Toggles")]
+		public bool ShowStoch3Line { get; set; }
+
+		// Stochastic line colors (editable)
 		[XmlIgnore]
 		[Display(Name = "Stoch 1 Color", Order = 1, GroupName = "Colors - Lines")]
 		public Brush Stoch1Brush { get; set; }
@@ -214,9 +217,9 @@ namespace NinjaTrader.NinjaScript.Indicators
 			set { Stoch4Brush = BrushSerialization.FromString(value); }
 		}
 
-		// Zingers
+		// Zinger vertical lines (optional)
 		[NinjaScriptProperty]
-		[Display(Name = "Show Zingers (warning vertical lines)", Order = 1, GroupName = "Zingers")]
+		[Display(Name = "Show Zingers (vertical lines)", Order = 1, GroupName = "Zingers")]
 		public bool ShowZingers { get; set; }
 
 		[XmlIgnore]
@@ -241,6 +244,11 @@ namespace NinjaTrader.NinjaScript.Indicators
 			set { ZingerBullBrush = BrushSerialization.FromString(value); }
 		}
 
+		// ABCD +++++ markers
+		[NinjaScriptProperty]
+		[Display(Name = "Show +++++ Warnings (Stoch4 pegged)", Order = 1, GroupName = "ABCD Markers")]
+		public bool ShowPlusWarnings { get; set; }
+
 		// =========================
 		// Internals
 		// =========================
@@ -253,17 +261,20 @@ namespace NinjaTrader.NinjaScript.Indicators
 		private int barsSinceStoch4Le90;
 		private int barsSinceStoch4Ge10;
 
-		private bool prevBgRed, prevBgGreen, prevSuperDown, prevSuperUp, prevBearZ, prevBullZ, prevAbcdBull, prevAbcdBear;
+		private bool prevBgRed, prevBgGreen, prevSuperDown, prevSuperUp;
+		private bool prevBearZ, prevBullZ;
+		private bool prevAbcdBull, prevAbcdBear;
 
-		private const double AbcdTopY = 86.0;
-		private const double AbcdBottomY = 14.0;
+		// Marker Y locations (keep inside 0..100 so they don't clip)
+		private const double PlusTopY = 96.0;
+		private const double PlusBottomY = 4.0;
 
 		protected override void OnStateChange()
 		{
 			if (State == State.SetDefaults)
 			{
 				Name = "QR";
-				Description = "Quad Rotation - 4 Stochastics Overlay (20–80 blue zone + ABCD +++++ + zingers).";
+				Description = "Quad Rotation - 4 Stochastics Overlay (Blue 20–80 zone + +++++ pegged warnings + Zingers).";
 				IsOverlay = false;
 				Calculate = Calculate.OnBarClose;
 
@@ -279,17 +290,19 @@ namespace NinjaTrader.NinjaScript.Indicators
 
 				EnableAlerts = true;
 
-				ShowStoch2Line = true;
-				ShowStoch3Line = true;
-
+				// Zone defaults
 				ShowZoneFill  = true;
-				ZoneOpacity   = 35;
+				ZoneOpacity   = 38;
 				ZoneFillBrush = Brushes.DodgerBlue;
 
+				// Quad BG defaults (you can edit)
 				QuadRedBrush     = Brushes.Red;
 				QuadGreenBrush   = Brushes.LimeGreen;
-				QuadRedOpacity   = 30;
+				QuadRedOpacity   = 30;   // lighter default; adjust in UI if you want stronger
 				QuadGreenOpacity = 30;
+
+				ShowStoch2Line = true;
+				ShowStoch3Line = true;
 
 				Stoch1Brush = Brushes.Gold;
 				Stoch2Brush = Brushes.Orange;
@@ -299,6 +312,8 @@ namespace NinjaTrader.NinjaScript.Indicators
 				ShowZingers = true;
 				ZingerBearBrush = Brushes.Red;
 				ZingerBullBrush = Brushes.LimeGreen;
+
+				ShowPlusWarnings = true;
 
 				AddPlot(Stoch1Brush, "Stoch1D");
 				AddPlot(Stoch2Brush, "Stoch2D");
@@ -310,11 +325,12 @@ namespace NinjaTrader.NinjaScript.Indicators
 				Plots[2].Width = 1;
 				Plots[3].Width = 3;
 
-				AddLine(Brushes.White, 80, "Overbought80");
-				AddLine(Brushes.White, 20, "Oversold20");
+				// Lines styled similar to your original formatting
+				AddLine(Brushes.Firebrick, 80, "Overbought80");
+				AddLine(Brushes.Green, 20, "Oversold20");
 				AddLine(Brushes.White, 50, "Midline50");
-				AddLine(Brushes.White, 90, "ExtremeOB90");
-				AddLine(Brushes.White, 10, "ExtremeOS10");
+				AddLine(Brushes.Firebrick, 90, "ExtremeOB90");
+				AddLine(Brushes.Green, 10, "ExtremeOS10");
 			}
 			else if (State == State.DataLoaded)
 			{
@@ -355,6 +371,7 @@ namespace NinjaTrader.NinjaScript.Indicators
 				return;
 			}
 
+			// Apply user-selected line colors (UI wins)
 			Plots[0].Brush = Stoch1Brush;
 			Plots[1].Brush = Stoch2Brush;
 			Plots[2].Brush = Stoch3Brush;
@@ -365,30 +382,19 @@ namespace NinjaTrader.NinjaScript.Indicators
 			ComputeStochD(K3, 1, D3, rawK3, smoothK3, dSeries3, out double s3);
 			ComputeStochD(K4, SmoothK4, D4, rawK4, smoothK4Series, dSeries4, out double s4);
 
+			// Plot assignment (with visibility toggles)
 			Values[0][0] = s1;
 			Values[1][0] = ShowStoch2Line ? s2 : double.NaN;
 			Values[2][0] = ShowStoch3Line ? s3 : double.NaN;
 			Values[3][0] = s4;
 
+			// Use INTERNAL %D series for previous values so logic is unchanged even when lines are hidden
 			double s1Prev = dSeries1[1];
 			double s2Prev = dSeries2[1];
 			double s3Prev = dSeries3[1];
 			double s4Prev = dSeries4[1];
 
-			// 20–80 zone fill (outline=null, area=fill)
-			if (ShowZoneFill && ZoneFillBrush != null)
-			{
-				int startBarsAgo = CurrentBar;
-				int endBarsAgo   = 0;
-
-				Brush fill = WithOpacity(ZoneFillBrush, ZoneOpacity);
-
-				Draw.Rectangle(this, "QR_ZONE_20_80", false,
-					startBarsAgo, 80,
-					endBarsAgo,   20,
-					null, fill, 0);
-			}
-
+			// Quad rotation slope logic
 			bool s1Down = (s1 - s1Prev) < 0 && s1 >= 50;
 			bool s2Down = (s2 - s2Prev) < 0 && s2 >= 50;
 			bool s3Down = (s3 - s3Prev) <= 0 && s3 > 80;
@@ -400,7 +406,7 @@ namespace NinjaTrader.NinjaScript.Indicators
 			bool s4Up = (s4 - s4Prev) >= 0 && s4 < 20;
 
 			int downCount = (s1Down ? 1 : 0) + (s2Down ? 1 : 0) + (s3Down ? 1 : 0) + (s4Down ? 1 : 0);
-			int upCount   = (s1Up   ? 1 : 0) + (s2Up   ? 1 : 0) + (s3Up   ? 1 : 0) + (s4Up   ? 1 : 0);
+			int upCount   = (s1Up ? 1 : 0) + (s2Up ? 1 : 0) + (s3Up ? 1 : 0) + (s4Up ? 1 : 0);
 
 			bool bgRed   = downCount >= MinCount;
 			bool bgGreen = upCount   >= MinCount;
@@ -422,31 +428,46 @@ namespace NinjaTrader.NinjaScript.Indicators
 			prevBgRed = bgRed;
 			prevBgGreen = bgGreen;
 
-			// ABCD shield counters
+			// ABCD shield counters (barssince equivalents)
 			if (s4 <= 90) barsSinceStoch4Le90 = 0; else barsSinceStoch4Le90++;
 			if (s4 >= 10) barsSinceStoch4Ge10 = 0; else barsSinceStoch4Ge10++;
 
-			bool abcdBull = barsSinceStoch4Le90 > AbcdBars90;
-			bool abcdBear = barsSinceStoch4Ge10 > AbcdBars10;
+			bool abcdShieldBull = barsSinceStoch4Le90 > AbcdBars90;  // "shield long"
+			bool abcdShieldBear = barsSinceStoch4Ge10 > AbcdBars10;  // "shield short"
 
-			if (abcdBull)
-				Draw.Text(this, "ABCD_BULL_PLUS_" + CurrentBar, "+++++", 0, AbcdTopY, Brushes.LimeGreen);
+			// PEGGED conditions (what you asked for explicitly)
+			bool peggedHigh = s4 >= 90;
+			bool peggedLow  = s4 <= 10;
 
-			if (abcdBear)
-				Draw.Text(this, "ABCD_BEAR_PLUS_" + CurrentBar, "+++++", 0, AbcdBottomY, Brushes.Red);
+			// ---- +++++ WARNINGS ----
+			// We draw if pegged OR shield (so you get immediate +++++ and continued +++++ while the shield is on).
+			bool showPlusHigh = ShowPlusWarnings && (peggedHigh || abcdShieldBull);
+			bool showPlusLow  = ShowPlusWarnings && (peggedLow  || abcdShieldBear);
 
+			if (showPlusHigh)
+			{
+				// keep tag unique per bar
+				Draw.Text(this, "ABCD_PLUS_HIGH_" + CurrentBar, "+++++", 0, PlusTopY, Brushes.LimeGreen);
+			}
+
+			if (showPlusLow)
+			{
+				Draw.Text(this, "ABCD_PLUS_LOW_" + CurrentBar, "+++++", 0, PlusBottomY, Brushes.Red);
+			}
+
+			// Alerts for shield edge (optional)
 			if (EnableAlerts)
 			{
-				if (abcdBull && !prevAbcdBull)
-					Alert("ABCD_LONG", Priority.Medium, "ABCD Long detected", "Alert2.wav", 0, Brushes.LimeGreen, Brushes.Black);
+				if (abcdShieldBull && !prevAbcdBull)
+					Alert("ABCD_LONG", Priority.Medium, "ABCD Long (shield) detected", "Alert2.wav", 0, Brushes.LimeGreen, Brushes.Black);
 
-				if (abcdBear && !prevAbcdBear)
-					Alert("ABCD_SHORT", Priority.Medium, "ABCD Short detected", "Alert2.wav", 0, Brushes.Red, Brushes.White);
+				if (abcdShieldBear && !prevAbcdBear)
+					Alert("ABCD_SHORT", Priority.Medium, "ABCD Short (shield) detected", "Alert2.wav", 0, Brushes.Red, Brushes.White);
 			}
-			prevAbcdBull = abcdBull;
-			prevAbcdBear = abcdBear;
+			prevAbcdBull = abcdShieldBull;
+			prevAbcdBear = abcdShieldBear;
 
-			// SUPER arrows
+			// SUPER signals (all 4)
 			bool superDown = s1Down && s2Down && s3Down && s4Down;
 			bool superUp   = s1Up   && s2Up   && s3Up   && s4Up;
 
@@ -467,7 +488,8 @@ namespace NinjaTrader.NinjaScript.Indicators
 			prevSuperDown = superDown;
 			prevSuperUp = superUp;
 
-			// Zingers
+			// ---- ZINGERS (vertical lines) ----
+			// Zinger logic exactly per your Pine section 9
 			bool s1CrossAbove80 = CrossAbove(dSeries1, 80, 1);
 			bool s1CrossBelow20 = CrossBelow(dSeries1, 20, 1);
 
@@ -502,8 +524,49 @@ namespace NinjaTrader.NinjaScript.Indicators
 				if (bullishZinger && !prevBullZ)
 					Alert("ZINGER_BULL", Priority.Medium, "Zinger Bullish (Look for Long Soon)", "Alert4.wav", 0, Brushes.LimeGreen, Brushes.Black);
 			}
+
 			prevBearZ = bearishZinger;
 			prevBullZ = bullishZinger;
+		}
+
+		// TV-style filled 20-80 zone rendered behind plots (SharpDX safe usage without ToDxBrush)
+		protected override void OnRender(ChartControl chartControl, ChartScale chartScale)
+		{
+			// Draw the zone fill FIRST, then let NT draw plots/objects on top.
+			if (ShowZoneFill && ZoneFillBrush != null && chartControl != null && chartScale != null && ChartPanel != null)
+			{
+				float y80 = chartScale.GetYByValue(80);
+				float y20 = chartScale.GetYByValue(20);
+
+				float top = Math.Min(y80, y20);
+				float bottom = Math.Max(y80, y20);
+				float height = Math.Max(1, bottom - top);
+
+				float x = ChartPanel.X;
+				float width = ChartPanel.W;
+
+				Brush wpf = WithOpacity(ZoneFillBrush, ZoneOpacity);
+				var sb = wpf as SolidColorBrush;
+				if (sb != null)
+				{
+					Color mc = sb.Color;
+
+					var dxColor = new SharpDX.Color4(
+						mc.R / 255f,
+						mc.G / 255f,
+						mc.B / 255f,
+						mc.A / 255f
+					);
+
+					using (var dxBrush = new SharpDX.Direct2D1.SolidColorBrush(RenderTarget, dxColor))
+					{
+						var rect = new SharpDX.RectangleF(x, top, width, height);
+						RenderTarget.FillRectangle(rect, dxBrush);
+					}
+				}
+			}
+
+			base.OnRender(chartControl, chartScale);
 		}
 
 		private void ComputeStochD(int kLen, int smoothKLen, int dLen,
