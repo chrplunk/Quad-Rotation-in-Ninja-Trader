@@ -586,3 +586,60 @@ namespace NinjaTrader.NinjaScript.Indicators
 		}
 	}
 }
+
+#region NinjaScript generated code. Neither change nor remove.
+
+namespace NinjaTrader.NinjaScript.Indicators
+{
+	public partial class Indicator : NinjaTrader.Gui.NinjaScript.IndicatorRenderBase
+	{
+		private QR[] cacheQR;
+		public QR QR(int minCount, bool enableAlerts, int k1, int d1, int k2, int d2, int k3, int d3, int k4, int d4, int smoothK4, int abcdBars90, int abcdBars10, bool showZoneFill, int zoneOpacity, int quadRedOpacity, int quadGreenOpacity, bool showStoch2Line, bool showStoch3Line, bool showZingers, bool showWarningMarkers)
+		{
+			return QR(Input, minCount, enableAlerts, k1, d1, k2, d2, k3, d3, k4, d4, smoothK4, abcdBars90, abcdBars10, showZoneFill, zoneOpacity, quadRedOpacity, quadGreenOpacity, showStoch2Line, showStoch3Line, showZingers, showWarningMarkers);
+		}
+
+		public QR QR(ISeries<double> input, int minCount, bool enableAlerts, int k1, int d1, int k2, int d2, int k3, int d3, int k4, int d4, int smoothK4, int abcdBars90, int abcdBars10, bool showZoneFill, int zoneOpacity, int quadRedOpacity, int quadGreenOpacity, bool showStoch2Line, bool showStoch3Line, bool showZingers, bool showWarningMarkers)
+		{
+			if (cacheQR != null)
+				for (int idx = 0; idx < cacheQR.Length; idx++)
+					if (cacheQR[idx] != null && cacheQR[idx].MinCount == minCount && cacheQR[idx].EnableAlerts == enableAlerts && cacheQR[idx].K1 == k1 && cacheQR[idx].D1 == d1 && cacheQR[idx].K2 == k2 && cacheQR[idx].D2 == d2 && cacheQR[idx].K3 == k3 && cacheQR[idx].D3 == d3 && cacheQR[idx].K4 == k4 && cacheQR[idx].D4 == d4 && cacheQR[idx].SmoothK4 == smoothK4 && cacheQR[idx].AbcdBars90 == abcdBars90 && cacheQR[idx].AbcdBars10 == abcdBars10 && cacheQR[idx].ShowZoneFill == showZoneFill && cacheQR[idx].ZoneOpacity == zoneOpacity && cacheQR[idx].QuadRedOpacity == quadRedOpacity && cacheQR[idx].QuadGreenOpacity == quadGreenOpacity && cacheQR[idx].ShowStoch2Line == showStoch2Line && cacheQR[idx].ShowStoch3Line == showStoch3Line && cacheQR[idx].ShowZingers == showZingers && cacheQR[idx].ShowWarningMarkers == showWarningMarkers && cacheQR[idx].EqualsInput(input))
+						return cacheQR[idx];
+			return CacheIndicator<QR>(new QR(){ MinCount = minCount, EnableAlerts = enableAlerts, K1 = k1, D1 = d1, K2 = k2, D2 = d2, K3 = k3, D3 = d3, K4 = k4, D4 = d4, SmoothK4 = smoothK4, AbcdBars90 = abcdBars90, AbcdBars10 = abcdBars10, ShowZoneFill = showZoneFill, ZoneOpacity = zoneOpacity, QuadRedOpacity = quadRedOpacity, QuadGreenOpacity = quadGreenOpacity, ShowStoch2Line = showStoch2Line, ShowStoch3Line = showStoch3Line, ShowZingers = showZingers, ShowWarningMarkers = showWarningMarkers }, input, ref cacheQR);
+		}
+	}
+}
+
+namespace NinjaTrader.NinjaScript.MarketAnalyzerColumns
+{
+	public partial class MarketAnalyzerColumn : MarketAnalyzerColumnBase
+	{
+		public Indicators.QR QR(int minCount, bool enableAlerts, int k1, int d1, int k2, int d2, int k3, int d3, int k4, int d4, int smoothK4, int abcdBars90, int abcdBars10, bool showZoneFill, int zoneOpacity, int quadRedOpacity, int quadGreenOpacity, bool showStoch2Line, bool showStoch3Line, bool showZingers, bool showWarningMarkers)
+		{
+			return indicator.QR(Input, minCount, enableAlerts, k1, d1, k2, d2, k3, d3, k4, d4, smoothK4, abcdBars90, abcdBars10, showZoneFill, zoneOpacity, quadRedOpacity, quadGreenOpacity, showStoch2Line, showStoch3Line, showZingers, showWarningMarkers);
+		}
+
+		public Indicators.QR QR(ISeries<double> input , int minCount, bool enableAlerts, int k1, int d1, int k2, int d2, int k3, int d3, int k4, int d4, int smoothK4, int abcdBars90, int abcdBars10, bool showZoneFill, int zoneOpacity, int quadRedOpacity, int quadGreenOpacity, bool showStoch2Line, bool showStoch3Line, bool showZingers, bool showWarningMarkers)
+		{
+			return indicator.QR(input, minCount, enableAlerts, k1, d1, k2, d2, k3, d3, k4, d4, smoothK4, abcdBars90, abcdBars10, showZoneFill, zoneOpacity, quadRedOpacity, quadGreenOpacity, showStoch2Line, showStoch3Line, showZingers, showWarningMarkers);
+		}
+	}
+}
+
+namespace NinjaTrader.NinjaScript.Strategies
+{
+	public partial class Strategy : NinjaTrader.Gui.NinjaScript.StrategyRenderBase
+	{
+		public Indicators.QR QR(int minCount, bool enableAlerts, int k1, int d1, int k2, int d2, int k3, int d3, int k4, int d4, int smoothK4, int abcdBars90, int abcdBars10, bool showZoneFill, int zoneOpacity, int quadRedOpacity, int quadGreenOpacity, bool showStoch2Line, bool showStoch3Line, bool showZingers, bool showWarningMarkers)
+		{
+			return indicator.QR(Input, minCount, enableAlerts, k1, d1, k2, d2, k3, d3, k4, d4, smoothK4, abcdBars90, abcdBars10, showZoneFill, zoneOpacity, quadRedOpacity, quadGreenOpacity, showStoch2Line, showStoch3Line, showZingers, showWarningMarkers);
+		}
+
+		public Indicators.QR QR(ISeries<double> input , int minCount, bool enableAlerts, int k1, int d1, int k2, int d2, int k3, int d3, int k4, int d4, int smoothK4, int abcdBars90, int abcdBars10, bool showZoneFill, int zoneOpacity, int quadRedOpacity, int quadGreenOpacity, bool showStoch2Line, bool showStoch3Line, bool showZingers, bool showWarningMarkers)
+		{
+			return indicator.QR(input, minCount, enableAlerts, k1, d1, k2, d2, k3, d3, k4, d4, smoothK4, abcdBars90, abcdBars10, showZoneFill, zoneOpacity, quadRedOpacity, quadGreenOpacity, showStoch2Line, showStoch3Line, showZingers, showWarningMarkers);
+		}
+	}
+}
+
+#endregion
