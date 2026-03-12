@@ -15,10 +15,6 @@ namespace NinjaTrader.NinjaScript.Indicators
 {
 	public class QR : Indicator
 	{
-		// =========================
-		// Inputs (logic)
-		// =========================
-
 		[NinjaScriptProperty]
 		[Range(1, 4)]
 		[Display(Name = "Min # of Stochastics for BG Coloring", Order = 1, GroupName = "Signals")]
@@ -82,10 +78,6 @@ namespace NinjaTrader.NinjaScript.Indicators
 		[Range(1, 500)]
 		[Display(Name = "Bars Since Below 10 (Short)", Order = 2, GroupName = "ABCD Shield")]
 		public int AbcdBars10 { get; set; }
-
-		// =========================
-		// Visuals
-		// =========================
 
 		[NinjaScriptProperty]
 		[Display(Name = "Show 20-80 Zone Fill", Order = 1, GroupName = "Colors - Zone")]
@@ -178,25 +170,25 @@ namespace NinjaTrader.NinjaScript.Indicators
 		public bool ShowWarningMarkers { get; set; }
 
 		[XmlIgnore]
-		[Display(Name = "High Warning Color", Order = 2, GroupName = "ABCD Markers")]
-		public Brush WarnHighBrush { get; set; }
+		[Display(Name = "Above 90 Warning Color", Order = 2, GroupName = "ABCD Markers")]
+		public Brush WarnAbove90Brush { get; set; }
 
 		[Browsable(false)]
-		public string WarnHighBrushSerialize
+		public string WarnAbove90BrushSerialize
 		{
-			get { return BrushSerialization.ToString(WarnHighBrush); }
-			set { WarnHighBrush = BrushSerialization.FromString(value); }
+			get { return BrushSerialization.ToString(WarnAbove90Brush); }
+			set { WarnAbove90Brush = BrushSerialization.FromString(value); }
 		}
 
 		[XmlIgnore]
-		[Display(Name = "Low Warning Color", Order = 3, GroupName = "ABCD Markers")]
-		public Brush WarnLowBrush { get; set; }
+		[Display(Name = "Below 10 Warning Color", Order = 3, GroupName = "ABCD Markers")]
+		public Brush WarnBelow10Brush { get; set; }
 
 		[Browsable(false)]
-		public string WarnLowBrushSerialize
+		public string WarnBelow10BrushSerialize
 		{
-			get { return BrushSerialization.ToString(WarnLowBrush); }
-			set { WarnLowBrush = BrushSerialization.FromString(value); }
+			get { return BrushSerialization.ToString(WarnBelow10Brush); }
+			set { WarnBelow10Brush = BrushSerialization.FromString(value); }
 		}
 
 		[XmlIgnore]
@@ -243,10 +235,6 @@ namespace NinjaTrader.NinjaScript.Indicators
 			set { Stoch4Brush = BrushSerialization.FromString(value); }
 		}
 
-		// =========================
-		// Internals
-		// =========================
-
 		private Series<double> rawK1, smoothK1, dSeries1;
 		private Series<double> rawK2, smoothK2, dSeries2;
 		private Series<double> rawK3, smoothK3, dSeries3;
@@ -255,14 +243,14 @@ namespace NinjaTrader.NinjaScript.Indicators
 		private int barsSinceStoch4Le90;
 		private int barsSinceStoch4Ge10;
 
-		private bool prevBgRed, prevBgGreen, prevSuperDown, prevSuperUp, prevBearCont, prevBullCont, prevShieldBull, prevShieldBear;
+		private bool prevBgRed, prevBgGreen, prevSuperDown, prevSuperUp, prevBearCont, prevBullCont, prevShieldAbove90, prevShieldBelow10;
 
 		protected override void OnStateChange()
 		{
 			if (State == State.SetDefaults)
 			{
 				Name = "QR";
-				Description = "Quad Rotation - 4 Stochastics Overlay (blue zone + plotted warning markers + zingers).";
+				Description = "Quad Rotation - 4 Stochastics Overlay (blue zone + correctly oriented shield markers + zingers).";
 				IsOverlay = false;
 				Calculate = Calculate.OnBarClose;
 
@@ -300,17 +288,23 @@ namespace NinjaTrader.NinjaScript.Indicators
 				ZingerBullBrush = Brushes.LimeGreen;
 
 				ShowWarningMarkers = true;
-				WarnHighBrush = Brushes.LimeGreen;
-				WarnLowBrush = Brushes.Red;
+
+				// USER'S REQUEST:
+				// above 90 = GREEN triangle UP
+				// below 10 = RED triangle DOWN
+				WarnAbove90Brush = Brushes.LimeGreen;
+				WarnBelow10Brush = Brushes.Red;
 
 				AddPlot(Stoch1Brush, "Stoch1D");
 				AddPlot(Stoch2Brush, "Stoch2D");
 				AddPlot(Stoch3Brush, "Stoch3D");
 				AddPlot(Stoch4Brush, "Stoch4D");
 
-				// Dedicated warning plots
-				AddPlot(WarnHighBrush, "WarnHigh");
-				AddPlot(WarnLowBrush, "WarnLow");
+				// Plot 4 = ABOVE 90 warning = GREEN UP
+				AddPlot(WarnAbove90Brush, "WarnAbove90");
+
+				// Plot 5 = BELOW 10 warning = RED DOWN
+				AddPlot(WarnBelow10Brush, "WarnBelow10");
 
 				Plots[0].Width = 2;
 				Plots[1].Width = 1;
@@ -365,8 +359,8 @@ namespace NinjaTrader.NinjaScript.Indicators
 			Plots[1].Brush = Stoch2Brush;
 			Plots[2].Brush = Stoch3Brush;
 			Plots[3].Brush = Stoch4Brush;
-			Plots[4].Brush = WarnHighBrush;
-			Plots[5].Brush = WarnLowBrush;
+			Plots[4].Brush = WarnAbove90Brush;
+			Plots[5].Brush = WarnBelow10Brush;
 
 			ComputeStochD(K1, 1, D1, rawK1, smoothK1, dSeries1, out double s1);
 			ComputeStochD(K2, 1, D2, rawK2, smoothK2, dSeries2, out double s2);
@@ -405,35 +399,46 @@ namespace NinjaTrader.NinjaScript.Indicators
 			else if (bgGreen)
 				BackBrushes[0] = WithOpacity(QuadGreenBrush, QuadGreenOpacity);
 
-			if (s4 <= 90) barsSinceStoch4Le90 = 0; else barsSinceStoch4Le90++;
-			if (s4 >= 10) barsSinceStoch4Ge10 = 0; else barsSinceStoch4Ge10++;
+			// Shield counters
+			if (s4 <= 90)
+				barsSinceStoch4Le90 = 0;
+			else
+				barsSinceStoch4Le90++;
 
-			bool shieldBull = barsSinceStoch4Le90 > AbcdBars90;
-			bool shieldBear = barsSinceStoch4Ge10 > AbcdBars10;
+			if (s4 >= 10)
+				barsSinceStoch4Ge10 = 0;
+			else
+				barsSinceStoch4Ge10++;
 
-			bool peggedHigh = s4 >= 90;
-			bool peggedLow = s4 <= 10;
+			// Respect input count exactly
+			bool shieldAbove90 = barsSinceStoch4Le90 >= AbcdBars90;
+			bool shieldBelow10 = barsSinceStoch4Ge10 >= AbcdBars10;
 
-			// These are real plots, not draw objects
-			Values[4][0] = (ShowWarningMarkers && (peggedHigh || shieldBull)) ? 53 : double.NaN;
-			Values[5][0] = (ShowWarningMarkers && (peggedLow || shieldBear)) ? 47 : double.NaN;
+			// Above 90 = GREEN UP triangle
+			Values[4][0] = (ShowWarningMarkers && shieldAbove90) ? 53 : double.NaN;
+
+			// Below 10 = RED DOWN triangle
+			Values[5][0] = (ShowWarningMarkers && shieldBelow10) ? 47 : double.NaN;
 
 			if (EnableAlerts)
 			{
 				if (bgRed && !prevBgRed)
 					Alert("BG_RED", Priority.Medium, "Red BG Triggered", "Alert1.wav", 0, Brushes.Red, Brushes.White);
+
 				if (bgGreen && !prevBgGreen)
 					Alert("BG_GREEN", Priority.Medium, "Green BG Triggered", "Alert1.wav", 0, Brushes.LimeGreen, Brushes.Black);
 
-				if (shieldBull && !prevShieldBull)
-					Alert("ABCD_LONG", Priority.Medium, "ABCD Long detected", "Alert2.wav", 0, Brushes.LimeGreen, Brushes.Black);
-				if (shieldBear && !prevShieldBear)
-					Alert("ABCD_SHORT", Priority.Medium, "ABCD Short detected", "Alert2.wav", 0, Brushes.Red, Brushes.White);
+				if (shieldAbove90 && !prevShieldAbove90)
+					Alert("ABCD_ABOVE90", Priority.Medium, "ABCD Above 90 warning", "Alert2.wav", 0, Brushes.LimeGreen, Brushes.Black);
+
+				if (shieldBelow10 && !prevShieldBelow10)
+					Alert("ABCD_BELOW10", Priority.Medium, "ABCD Below 10 warning", "Alert2.wav", 0, Brushes.Red, Brushes.White);
 			}
+
 			prevBgRed = bgRed;
 			prevBgGreen = bgGreen;
-			prevShieldBull = shieldBull;
-			prevShieldBear = shieldBear;
+			prevShieldAbove90 = shieldAbove90;
+			prevShieldBelow10 = shieldBelow10;
 
 			bool superDown = s1Down && s2Down && s3Down && s4Down;
 			bool superUp   = s1Up && s2Up && s3Up && s4Up;
@@ -448,9 +453,11 @@ namespace NinjaTrader.NinjaScript.Indicators
 			{
 				if (superDown && !prevSuperDown)
 					Alert("SUPER_DOWN", Priority.High, "SUPER Down", "Alert3.wav", 0, Brushes.Red, Brushes.White);
+
 				if (superUp && !prevSuperUp)
 					Alert("SUPER_UP", Priority.High, "SUPER Up", "Alert3.wav", 0, Brushes.LimeGreen, Brushes.Black);
 			}
+
 			prevSuperDown = superDown;
 			prevSuperUp = superUp;
 
@@ -464,8 +471,10 @@ namespace NinjaTrader.NinjaScript.Indicators
 			int bullShieldCount = 0;
 			for (int i = 0; i < 10 && CurrentBar - i >= 0; i++)
 			{
-				if (dSeries4[i] < 10) bearShieldCount++;
-				if (dSeries4[i] > 90) bullShieldCount++;
+				if (dSeries4[i] < 10)
+					bearShieldCount++;
+				if (dSeries4[i] > 90)
+					bullShieldCount++;
 			}
 
 			bool bearCont = s4Below30 && s1CrossAbove80 && bearShieldCount >= 3;
@@ -488,6 +497,7 @@ namespace NinjaTrader.NinjaScript.Indicators
 				if (bullCont && !prevBullCont)
 					Alert("CONT_LONG", Priority.Medium, "Look for Long Soon (continuation)", "Alert4.wav", 0, Brushes.LimeGreen, Brushes.Black);
 			}
+
 			prevBearCont = bearCont;
 			prevBullCont = bullCont;
 		}
@@ -586,3 +596,60 @@ namespace NinjaTrader.NinjaScript.Indicators
 		}
 	}
 }
+
+#region NinjaScript generated code. Neither change nor remove.
+
+namespace NinjaTrader.NinjaScript.Indicators
+{
+	public partial class Indicator : NinjaTrader.Gui.NinjaScript.IndicatorRenderBase
+	{
+		private QR[] cacheQR;
+		public QR QR(int minCount, bool enableAlerts, int k1, int d1, int k2, int d2, int k3, int d3, int k4, int d4, int smoothK4, int abcdBars90, int abcdBars10, bool showZoneFill, int zoneOpacity, int quadRedOpacity, int quadGreenOpacity, bool showStoch2Line, bool showStoch3Line, bool showZingers, bool showWarningMarkers)
+		{
+			return QR(Input, minCount, enableAlerts, k1, d1, k2, d2, k3, d3, k4, d4, smoothK4, abcdBars90, abcdBars10, showZoneFill, zoneOpacity, quadRedOpacity, quadGreenOpacity, showStoch2Line, showStoch3Line, showZingers, showWarningMarkers);
+		}
+
+		public QR QR(ISeries<double> input, int minCount, bool enableAlerts, int k1, int d1, int k2, int d2, int k3, int d3, int k4, int d4, int smoothK4, int abcdBars90, int abcdBars10, bool showZoneFill, int zoneOpacity, int quadRedOpacity, int quadGreenOpacity, bool showStoch2Line, bool showStoch3Line, bool showZingers, bool showWarningMarkers)
+		{
+			if (cacheQR != null)
+				for (int idx = 0; idx < cacheQR.Length; idx++)
+					if (cacheQR[idx] != null && cacheQR[idx].MinCount == minCount && cacheQR[idx].EnableAlerts == enableAlerts && cacheQR[idx].K1 == k1 && cacheQR[idx].D1 == d1 && cacheQR[idx].K2 == k2 && cacheQR[idx].D2 == d2 && cacheQR[idx].K3 == k3 && cacheQR[idx].D3 == d3 && cacheQR[idx].K4 == k4 && cacheQR[idx].D4 == d4 && cacheQR[idx].SmoothK4 == smoothK4 && cacheQR[idx].AbcdBars90 == abcdBars90 && cacheQR[idx].AbcdBars10 == abcdBars10 && cacheQR[idx].ShowZoneFill == showZoneFill && cacheQR[idx].ZoneOpacity == zoneOpacity && cacheQR[idx].QuadRedOpacity == quadRedOpacity && cacheQR[idx].QuadGreenOpacity == quadGreenOpacity && cacheQR[idx].ShowStoch2Line == showStoch2Line && cacheQR[idx].ShowStoch3Line == showStoch3Line && cacheQR[idx].ShowZingers == showZingers && cacheQR[idx].ShowWarningMarkers == showWarningMarkers && cacheQR[idx].EqualsInput(input))
+						return cacheQR[idx];
+			return CacheIndicator<QR>(new QR(){ MinCount = minCount, EnableAlerts = enableAlerts, K1 = k1, D1 = d1, K2 = k2, D2 = d2, K3 = k3, D3 = d3, K4 = k4, D4 = d4, SmoothK4 = smoothK4, AbcdBars90 = abcdBars90, AbcdBars10 = abcdBars10, ShowZoneFill = showZoneFill, ZoneOpacity = zoneOpacity, QuadRedOpacity = quadRedOpacity, QuadGreenOpacity = quadGreenOpacity, ShowStoch2Line = showStoch2Line, ShowStoch3Line = showStoch3Line, ShowZingers = showZingers, ShowWarningMarkers = showWarningMarkers }, input, ref cacheQR);
+		}
+	}
+}
+
+namespace NinjaTrader.NinjaScript.MarketAnalyzerColumns
+{
+	public partial class MarketAnalyzerColumn : MarketAnalyzerColumnBase
+	{
+		public Indicators.QR QR(int minCount, bool enableAlerts, int k1, int d1, int k2, int d2, int k3, int d3, int k4, int d4, int smoothK4, int abcdBars90, int abcdBars10, bool showZoneFill, int zoneOpacity, int quadRedOpacity, int quadGreenOpacity, bool showStoch2Line, bool showStoch3Line, bool showZingers, bool showWarningMarkers)
+		{
+			return indicator.QR(Input, minCount, enableAlerts, k1, d1, k2, d2, k3, d3, k4, d4, smoothK4, abcdBars90, abcdBars10, showZoneFill, zoneOpacity, quadRedOpacity, quadGreenOpacity, showStoch2Line, showStoch3Line, showZingers, showWarningMarkers);
+		}
+
+		public Indicators.QR QR(ISeries<double> input , int minCount, bool enableAlerts, int k1, int d1, int k2, int d2, int k3, int d3, int k4, int d4, int smoothK4, int abcdBars90, int abcdBars10, bool showZoneFill, int zoneOpacity, int quadRedOpacity, int quadGreenOpacity, bool showStoch2Line, bool showStoch3Line, bool showZingers, bool showWarningMarkers)
+		{
+			return indicator.QR(input, minCount, enableAlerts, k1, d1, k2, d2, k3, d3, k4, d4, smoothK4, abcdBars90, abcdBars10, showZoneFill, zoneOpacity, quadRedOpacity, quadGreenOpacity, showStoch2Line, showStoch3Line, showZingers, showWarningMarkers);
+		}
+	}
+}
+
+namespace NinjaTrader.NinjaScript.Strategies
+{
+	public partial class Strategy : NinjaTrader.Gui.NinjaScript.StrategyRenderBase
+	{
+		public Indicators.QR QR(int minCount, bool enableAlerts, int k1, int d1, int k2, int d2, int k3, int d3, int k4, int d4, int smoothK4, int abcdBars90, int abcdBars10, bool showZoneFill, int zoneOpacity, int quadRedOpacity, int quadGreenOpacity, bool showStoch2Line, bool showStoch3Line, bool showZingers, bool showWarningMarkers)
+		{
+			return indicator.QR(Input, minCount, enableAlerts, k1, d1, k2, d2, k3, d3, k4, d4, smoothK4, abcdBars90, abcdBars10, showZoneFill, zoneOpacity, quadRedOpacity, quadGreenOpacity, showStoch2Line, showStoch3Line, showZingers, showWarningMarkers);
+		}
+
+		public Indicators.QR QR(ISeries<double> input , int minCount, bool enableAlerts, int k1, int d1, int k2, int d2, int k3, int d3, int k4, int d4, int smoothK4, int abcdBars90, int abcdBars10, bool showZoneFill, int zoneOpacity, int quadRedOpacity, int quadGreenOpacity, bool showStoch2Line, bool showStoch3Line, bool showZingers, bool showWarningMarkers)
+		{
+			return indicator.QR(input, minCount, enableAlerts, k1, d1, k2, d2, k3, d3, k4, d4, smoothK4, abcdBars90, abcdBars10, showZoneFill, zoneOpacity, quadRedOpacity, quadGreenOpacity, showStoch2Line, showStoch3Line, showZingers, showWarningMarkers);
+		}
+	}
+}
+
+#endregion
