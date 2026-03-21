@@ -199,7 +199,7 @@ namespace NinjaTrader.NinjaScript.Indicators
 		public bool ShowStoch3Line { get; set; }
 
 		[NinjaScriptProperty]
-		[Display(Name = "Show Zingers (vertical lines)", Order = 1, GroupName = "Zingers")]
+		[Display(Name = "Show Zingers", Order = 1, GroupName = "Zingers")]
 		public bool ShowZingers { get; set; }
 
 		[XmlIgnore]
@@ -305,16 +305,12 @@ namespace NinjaTrader.NinjaScript.Indicators
 
 		private bool prevBgRed, prevBgGreen, prevSuperDown, prevSuperUp, prevBearCont, prevBullCont, prevShieldAbove90, prevShieldBelow10;
 
-		// Pivot tracking - one set per stochastic
 		private int prevHighBar1 = -1; private double prevHighPrice1; private double prevHighStoch1;
 		private int prevLowBar1  = -1; private double prevLowPrice1;  private double prevLowStoch1;
-
 		private int prevHighBar2 = -1; private double prevHighPrice2; private double prevHighStoch2;
 		private int prevLowBar2  = -1; private double prevLowPrice2;  private double prevLowStoch2;
-
 		private int prevHighBar3 = -1; private double prevHighPrice3; private double prevHighStoch3;
 		private int prevLowBar3  = -1; private double prevLowPrice3;  private double prevLowStoch3;
-
 		private int prevHighBar4 = -1; private double prevHighPrice4; private double prevHighStoch4;
 		private int prevLowBar4  = -1; private double prevLowPrice4;  private double prevLowStoch4;
 
@@ -490,10 +486,10 @@ namespace NinjaTrader.NinjaScript.Indicators
 					Alert("ABCD_BELOW10", Priority.Medium, "ABCD Below 10 warning", "Alert2.wav", 0, Brushes.Red, Brushes.White);
 			}
 
-			prevBgRed          = bgRed;
-			prevBgGreen        = bgGreen;
-			prevShieldAbove90  = shieldAbove90;
-			prevShieldBelow10  = shieldBelow10;
+			prevBgRed         = bgRed;
+			prevBgGreen       = bgGreen;
+			prevShieldAbove90 = shieldAbove90;
+			prevShieldBelow10 = shieldBelow10;
 
 			bool superDown = s1Down && s2Down && s3Down && s4Down;
 			bool superUp   = s1Up   && s2Up   && s3Up   && s4Up;
@@ -514,11 +510,14 @@ namespace NinjaTrader.NinjaScript.Indicators
 			prevSuperDown = superDown;
 			prevSuperUp   = superUp;
 
-			bool s1CrossAbove80 = CrossAbove(dSeries1, 80, 1);
-			bool s1CrossBelow20 = CrossBelow(dSeries1, 20, 1);
-
-			bool s4Below30 = s4 < 30;
-			bool s4Above70 = s4 > 70;
+			// Zinger logic - arrows in subpanel
+			bool s1WasAbove90 = false;
+			bool s1WasBelow10 = false;
+			for (int i = 1; i <= 10 && CurrentBar - i >= 0; i++)
+			{
+				if (dSeries1[i] > 90) s1WasAbove90 = true;
+				if (dSeries1[i] < 10) s1WasBelow10 = true;
+			}
 
 			int bearShieldCount = 0;
 			int bullShieldCount = 0;
@@ -528,15 +527,18 @@ namespace NinjaTrader.NinjaScript.Indicators
 				if (dSeries4[i] > 90) bullShieldCount++;
 			}
 
-			bool bearCont = s4Below30 && CrossBelow(dSeries1, 90, 1) && bearShieldCount >= 3;
-			bool bullCont = s4Above70 && CrossAbove(dSeries1, 10, 1) && bullShieldCount >= 3;
+			bool s4Below30 = s4 < 30;
+			bool s4Above70 = s4 > 70;
+
+			bool bearCont = s4Below30 && CrossBelow(dSeries1, 80, 1) && s1WasAbove90 && bearShieldCount >= 3;
+			bool bullCont = s4Above70 && CrossAbove(dSeries1, 20, 1) && s1WasBelow10 && bullShieldCount >= 3;
 
 			if (ShowZingers)
 			{
 				if (bearCont)
-					Draw.VerticalLine(this, "Z_BEAR_" + CurrentBar, 0, ZingerBearBrush);
+					Draw.ArrowDown(this, "Z_BEAR_" + CurrentBar, false, 0, 98, ZingerBearBrush);
 				if (bullCont)
-					Draw.VerticalLine(this, "Z_BULL_" + CurrentBar, 0, ZingerBullBrush);
+					Draw.ArrowUp(this, "Z_BULL_" + CurrentBar, false, 0, 2, ZingerBullBrush);
 			}
 
 			if (EnableAlerts)
@@ -550,7 +552,6 @@ namespace NinjaTrader.NinjaScript.Indicators
 			prevBearCont = bearCont;
 			prevBullCont = bullCont;
 
-			// Divergence detection - runs after enough bars exist
 			int minBarsNeeded = DivPivotStrength * 2 + 1;
 			if (CurrentBar >= minBarsNeeded)
 			{
@@ -567,11 +568,10 @@ namespace NinjaTrader.NinjaScript.Indicators
 			ref int prevHighBar,   ref double prevHighPrice, ref double prevHighStoch,
 			ref int prevLowBar,    ref double prevLowPrice,  ref double prevLowStoch)
 		{
-			int s           = DivPivotStrength;
-			int pivotAbsBar = CurrentBar - s;  // absolute bar index of the pivot candidate
-			int pivotBarsAgo = s;              // barsAgo index for price/stoch lookup
+			int s            = DivPivotStrength;
+			int pivotAbsBar  = CurrentBar - s;
+			int pivotBarsAgo = s;
 
-			// --- BEARISH DIVERGENCE (pivot highs) ---
 			if (IsPivotHigh(stochSeries, s) && IsPivotHigh(High, s))
 			{
 				double curPrice = High[pivotBarsAgo];
@@ -598,7 +598,6 @@ namespace NinjaTrader.NinjaScript.Indicators
 				prevHighStoch = curStoch;
 			}
 
-			// --- BULLISH DIVERGENCE (pivot lows) ---
 			if (IsPivotLow(stochSeries, s) && IsPivotLow(Low, s))
 			{
 				double curPrice = Low[pivotBarsAgo];
@@ -652,13 +651,13 @@ namespace NinjaTrader.NinjaScript.Indicators
 		{
 			if (ShowZoneFill && ZoneFillBrush != null && chartControl != null && chartScale != null && ChartPanel != null)
 			{
-				float y80   = chartScale.GetYByValue(80);
-				float y20   = chartScale.GetYByValue(20);
-				float top   = Math.Min(y80, y20);
+				float y80    = chartScale.GetYByValue(80);
+				float y20    = chartScale.GetYByValue(20);
+				float top    = Math.Min(y80, y20);
 				float bottom = Math.Max(y80, y20);
 				float height = Math.Max(1, bottom - top);
-				float x     = ChartPanel.X;
-				float width = ChartPanel.W;
+				float x      = ChartPanel.X;
+				float width  = ChartPanel.W;
 
 				Brush wpf = WithOpacity(ZoneFillBrush, ZoneOpacity);
 				var sb = wpf as SolidColorBrush;
@@ -721,3 +720,60 @@ namespace NinjaTrader.NinjaScript.Indicators
 		}
 	}
 }
+
+#region NinjaScript generated code. Neither change nor remove.
+
+namespace NinjaTrader.NinjaScript.Indicators
+{
+	public partial class Indicator : NinjaTrader.Gui.NinjaScript.IndicatorRenderBase
+	{
+		private QR[] cacheQR;
+		public QR QR(int minCount, bool enableAlerts, int k1, int d1, int k2, int d2, int k3, int d3, int k4, int d4, int smoothK4, int abcdBars90, int abcdBars10, bool showDivLines1, bool showDivLines2, bool showDivLines3, bool showDivLines4, int divPivotStrength, int divMinBars, int divMaxBars, bool showZoneFill, int zoneOpacity, int quadRedOpacity, int quadGreenOpacity, bool showStoch2Line, bool showStoch3Line, bool showZingers, bool showWarningMarkers)
+		{
+			return QR(Input, minCount, enableAlerts, k1, d1, k2, d2, k3, d3, k4, d4, smoothK4, abcdBars90, abcdBars10, showDivLines1, showDivLines2, showDivLines3, showDivLines4, divPivotStrength, divMinBars, divMaxBars, showZoneFill, zoneOpacity, quadRedOpacity, quadGreenOpacity, showStoch2Line, showStoch3Line, showZingers, showWarningMarkers);
+		}
+
+		public QR QR(ISeries<double> input, int minCount, bool enableAlerts, int k1, int d1, int k2, int d2, int k3, int d3, int k4, int d4, int smoothK4, int abcdBars90, int abcdBars10, bool showDivLines1, bool showDivLines2, bool showDivLines3, bool showDivLines4, int divPivotStrength, int divMinBars, int divMaxBars, bool showZoneFill, int zoneOpacity, int quadRedOpacity, int quadGreenOpacity, bool showStoch2Line, bool showStoch3Line, bool showZingers, bool showWarningMarkers)
+		{
+			if (cacheQR != null)
+				for (int idx = 0; idx < cacheQR.Length; idx++)
+					if (cacheQR[idx] != null && cacheQR[idx].MinCount == minCount && cacheQR[idx].EnableAlerts == enableAlerts && cacheQR[idx].K1 == k1 && cacheQR[idx].D1 == d1 && cacheQR[idx].K2 == k2 && cacheQR[idx].D2 == d2 && cacheQR[idx].K3 == k3 && cacheQR[idx].D3 == d3 && cacheQR[idx].K4 == k4 && cacheQR[idx].D4 == d4 && cacheQR[idx].SmoothK4 == smoothK4 && cacheQR[idx].AbcdBars90 == abcdBars90 && cacheQR[idx].AbcdBars10 == abcdBars10 && cacheQR[idx].ShowDivLines1 == showDivLines1 && cacheQR[idx].ShowDivLines2 == showDivLines2 && cacheQR[idx].ShowDivLines3 == showDivLines3 && cacheQR[idx].ShowDivLines4 == showDivLines4 && cacheQR[idx].DivPivotStrength == divPivotStrength && cacheQR[idx].DivMinBars == divMinBars && cacheQR[idx].DivMaxBars == divMaxBars && cacheQR[idx].ShowZoneFill == showZoneFill && cacheQR[idx].ZoneOpacity == zoneOpacity && cacheQR[idx].QuadRedOpacity == quadRedOpacity && cacheQR[idx].QuadGreenOpacity == quadGreenOpacity && cacheQR[idx].ShowStoch2Line == showStoch2Line && cacheQR[idx].ShowStoch3Line == showStoch3Line && cacheQR[idx].ShowZingers == showZingers && cacheQR[idx].ShowWarningMarkers == showWarningMarkers && cacheQR[idx].EqualsInput(input))
+						return cacheQR[idx];
+			return CacheIndicator<QR>(new QR(){ MinCount = minCount, EnableAlerts = enableAlerts, K1 = k1, D1 = d1, K2 = k2, D2 = d2, K3 = k3, D3 = d3, K4 = k4, D4 = d4, SmoothK4 = smoothK4, AbcdBars90 = abcdBars90, AbcdBars10 = abcdBars10, ShowDivLines1 = showDivLines1, ShowDivLines2 = showDivLines2, ShowDivLines3 = showDivLines3, ShowDivLines4 = showDivLines4, DivPivotStrength = divPivotStrength, DivMinBars = divMinBars, DivMaxBars = divMaxBars, ShowZoneFill = showZoneFill, ZoneOpacity = zoneOpacity, QuadRedOpacity = quadRedOpacity, QuadGreenOpacity = quadGreenOpacity, ShowStoch2Line = showStoch2Line, ShowStoch3Line = showStoch3Line, ShowZingers = showZingers, ShowWarningMarkers = showWarningMarkers }, input, ref cacheQR);
+		}
+	}
+}
+
+namespace NinjaTrader.NinjaScript.MarketAnalyzerColumns
+{
+	public partial class MarketAnalyzerColumn : MarketAnalyzerColumnBase
+	{
+		public Indicators.QR QR(int minCount, bool enableAlerts, int k1, int d1, int k2, int d2, int k3, int d3, int k4, int d4, int smoothK4, int abcdBars90, int abcdBars10, bool showDivLines1, bool showDivLines2, bool showDivLines3, bool showDivLines4, int divPivotStrength, int divMinBars, int divMaxBars, bool showZoneFill, int zoneOpacity, int quadRedOpacity, int quadGreenOpacity, bool showStoch2Line, bool showStoch3Line, bool showZingers, bool showWarningMarkers)
+		{
+			return indicator.QR(Input, minCount, enableAlerts, k1, d1, k2, d2, k3, d3, k4, d4, smoothK4, abcdBars90, abcdBars10, showDivLines1, showDivLines2, showDivLines3, showDivLines4, divPivotStrength, divMinBars, divMaxBars, showZoneFill, zoneOpacity, quadRedOpacity, quadGreenOpacity, showStoch2Line, showStoch3Line, showZingers, showWarningMarkers);
+		}
+
+		public Indicators.QR QR(ISeries<double> input, int minCount, bool enableAlerts, int k1, int d1, int k2, int d2, int k3, int d3, int k4, int d4, int smoothK4, int abcdBars90, int abcdBars10, bool showDivLines1, bool showDivLines2, bool showDivLines3, bool showDivLines4, int divPivotStrength, int divMinBars, int divMaxBars, bool showZoneFill, int zoneOpacity, int quadRedOpacity, int quadGreenOpacity, bool showStoch2Line, bool showStoch3Line, bool showZingers, bool showWarningMarkers)
+		{
+			return indicator.QR(input, minCount, enableAlerts, k1, d1, k2, d2, k3, d3, k4, d4, smoothK4, abcdBars90, abcdBars10, showDivLines1, showDivLines2, showDivLines3, showDivLines4, divPivotStrength, divMinBars, divMaxBars, showZoneFill, zoneOpacity, quadRedOpacity, quadGreenOpacity, showStoch2Line, showStoch3Line, showZingers, showWarningMarkers);
+		}
+	}
+}
+
+namespace NinjaTrader.NinjaScript.Strategies
+{
+	public partial class Strategy : NinjaTrader.Gui.NinjaScript.StrategyRenderBase
+	{
+		public Indicators.QR QR(int minCount, bool enableAlerts, int k1, int d1, int k2, int d2, int k3, int d3, int k4, int d4, int smoothK4, int abcdBars90, int abcdBars10, bool showDivLines1, bool showDivLines2, bool showDivLines3, bool showDivLines4, int divPivotStrength, int divMinBars, int divMaxBars, bool showZoneFill, int zoneOpacity, int quadRedOpacity, int quadGreenOpacity, bool showStoch2Line, bool showStoch3Line, bool showZingers, bool showWarningMarkers)
+		{
+			return indicator.QR(Input, minCount, enableAlerts, k1, d1, k2, d2, k3, d3, k4, d4, smoothK4, abcdBars90, abcdBars10, showDivLines1, showDivLines2, showDivLines3, showDivLines4, divPivotStrength, divMinBars, divMaxBars, showZoneFill, zoneOpacity, quadRedOpacity, quadGreenOpacity, showStoch2Line, showStoch3Line, showZingers, showWarningMarkers);
+		}
+
+		public Indicators.QR QR(ISeries<double> input, int minCount, bool enableAlerts, int k1, int d1, int k2, int d2, int k3, int d3, int k4, int d4, int smoothK4, int abcdBars90, int abcdBars10, bool showDivLines1, bool showDivLines2, bool showDivLines3, bool showDivLines4, int divPivotStrength, int divMinBars, int divMaxBars, bool showZoneFill, int zoneOpacity, int quadRedOpacity, int quadGreenOpacity, bool showStoch2Line, bool showStoch3Line, bool showZingers, bool showWarningMarkers)
+		{
+			return indicator.QR(input, minCount, enableAlerts, k1, d1, k2, d2, k3, d3, k4, d4, smoothK4, abcdBars90, abcdBars10, showDivLines1, showDivLines2, showDivLines3, showDivLines4, divPivotStrength, divMinBars, divMaxBars, showZoneFill, zoneOpacity, quadRedOpacity, quadGreenOpacity, showStoch2Line, showStoch3Line, showZingers, showWarningMarkers);
+		}
+	}
+}
+
+#endregion
