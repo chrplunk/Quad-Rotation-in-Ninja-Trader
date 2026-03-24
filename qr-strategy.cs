@@ -1,5 +1,5 @@
 // Christopher Plunkett
-// QR Strategy - Based on Quad Rotation + VuManChu + Keltner + VWAP + MACD
+// QR Strategy - Based on Quad Rotation + Keltner + MFI + MACD
 
 #region Using declarations
 using System;
@@ -21,30 +21,22 @@ namespace NinjaTrader.NinjaScript.Strategies
 {
     public class QRStrategy : Strategy
     {
-        // Stochastic series
+        private const int K1 = 9,  D1 = 3;
+        private const int K2 = 14, D2 = 3;
+        private const int K3 = 40, D3 = 4;
+        private const int K4 = 60, D4 = 10, SmoothK4 = 1;
+
         private Series<double> rawK1, smoothK1Series, dSeries1;
         private Series<double> rawK2, smoothK2Series, dSeries2;
         private Series<double> rawK3, smoothK3Series, dSeries3;
         private Series<double> rawK4, smoothK4Series2, dSeries4;
 
-        // WaveTrend series
-        private Series<double> wtEsa, wtDe, wtCi, wt1Series, wt2Series;
-
-        // MFI series
         private Series<double> mfiSeries;
 
-        // VWAP manual calculation
-        private Series<double> vwapSeries;
-        private Series<double> vwapSumPV;
-        private Series<double> vwapSumV;
-        private Series<double> vwapSumPV2;
-
-        // Indicators
         private NinjaTrader.NinjaScript.Indicators.KeltnerChannel keltner;
         private NinjaTrader.NinjaScript.Indicators.MACD macdInd;
-        private NinjaTrader.NinjaScript.Indicators.ATR atrInd;
+        private NinjaTrader.NinjaScript.Indicators.EMA ema20;
 
-        // Stop loss tracking
         private double entryPrice;
         private double stopPrice;
         private double targetPrice;
@@ -61,52 +53,30 @@ namespace NinjaTrader.NinjaScript.Strategies
                 IsExitOnSessionCloseStrategy    = true;
                 ExitOnSessionCloseSeconds       = 30;
 
-                // General
-                Quantity            = 1;
+                Quantity            = 2;
                 MinScore            = 2;
+                QRMinCount          = 3;
 
-                // Stochastics
-                K1 = 9;  D1 = 3;
-                K2 = 14; D2 = 3;
-                K3 = 40; D3 = 4;
-                K4 = 60; D4 = 10; SmoothK4 = 1;
-
-                // Keltner
+                UseKeltner          = true;
                 KeltnerPeriod       = 20;
                 KeltnerMultiplier   = 2.0;
-                KeltnerCandleCount  = 4;
+                KeltnerLookback     = 6;
 
-                // VWAP
-                VwapBandMultiplier  = 2.0;
-
-                // WaveTrend (optional)
-                UseWaveTrend        = true;
-                WtChannelLen        = 9;
-                WtAverageLen        = 12;
-                WtMALen             = 3;
-
-                // MFI (optional)
                 UseMfi              = true;
                 MfiPeriod           = 60;
                 MfiMultiplier       = 150;
-                MfiLookback         = 5;
+                MfiConsecutiveBars  = 5;
 
-                // MACD (optional)
                 UseMacd             = true;
                 MacdFast            = 12;
                 MacdSlow            = 26;
                 MacdSignal          = 9;
+                MacdConsecutiveBars = 5;
 
-                // Stop Loss
-                StopType            = StopLossType.Fixed;
-                StopPoints          = 10;
-                AtrMultiplier       = 1.5;
-                AtrPeriod           = 14;
-                SwingLookback       = 10;
+                StopPoints          = 16;
 
-                // Profit Target
-                TargetType          = ProfitTargetType.RR1to2;
-                TargetPoints        = 20;
+                TargetType          = ProfitTargetType.RR1to1_5;
+                TargetPoints        = 24;
             }
             else if (State == State.DataLoaded)
             {
@@ -126,22 +96,11 @@ namespace NinjaTrader.NinjaScript.Strategies
                 smoothK4Series2 = new Series<double>(this);
                 dSeries4        = new Series<double>(this);
 
-                wtEsa      = new Series<double>(this);
-                wtDe       = new Series<double>(this);
-                wtCi       = new Series<double>(this);
-                wt1Series  = new Series<double>(this);
-                wt2Series  = new Series<double>(this);
-
-                mfiSeries  = new Series<double>(this);
-
-                vwapSeries  = new Series<double>(this);
-                vwapSumPV   = new Series<double>(this);
-                vwapSumV    = new Series<double>(this);
-                vwapSumPV2  = new Series<double>(this);
+                mfiSeries = new Series<double>(this);
 
                 keltner = KeltnerChannel(KeltnerMultiplier, KeltnerPeriod);
                 macdInd = MACD(MacdFast, MacdSlow, MacdSignal);
-                atrInd  = ATR(AtrPeriod);
+                ema20   = EMA(20);
             }
         }
 
@@ -163,189 +122,131 @@ namespace NinjaTrader.NinjaScript.Strategies
             double s4Prev = dSeries4[1];
 
             // =====================
-            // Manual VWAP calculation (resets each session)
-            // =====================
-            double typicalPrice = (High[0] + Low[0] + Close[0]) / 3.0;
-
-            if (Bars.IsFirstBarOfSession)
-            {
-                vwapSumPV[0]  = typicalPrice * Volume[0];
-                vwapSumV[0]   = Volume[0];
-                vwapSumPV2[0] = typicalPrice * typicalPrice * Volume[0];
-            }
-            else
-            {
-                vwapSumPV[0]  = vwapSumPV[1]  + typicalPrice * Volume[0];
-                vwapSumV[0]   = vwapSumV[1]   + Volume[0];
-                vwapSumPV2[0] = vwapSumPV2[1] + typicalPrice * typicalPrice * Volume[0];
-            }
-
-            double vwap = vwapSumV[0] > 0 ? vwapSumPV[0] / vwapSumV[0] : typicalPrice;
-            double vwapVariance = vwapSumV[0] > 0 ? (vwapSumPV2[0] / vwapSumV[0]) - (vwap * vwap) : 0;
-            double vwapStdDev = vwapVariance > 0 ? Math.Sqrt(vwapVariance) : 0;
-            double vwapUpperBand2 = vwap + VwapBandMultiplier * vwapStdDev;
-            double vwapLowerBand2 = vwap - VwapBandMultiplier * vwapStdDev;
-
-            // =====================
-            // Compute WaveTrend
-            // =====================
-            double hlc3Val = typicalPrice;
-            wtEsa[0]  = EMA(Typical, WtChannelLen)[0];
-            double absVal = Math.Abs(hlc3Val - wtEsa[0]);
-
-            if (CurrentBar == 0)
-                wtDe[0] = absVal;
-            else
-                wtDe[0] = wtDe[1] + 2.0 / (WtChannelLen + 1) * (absVal - wtDe[1]);
-
-            wtCi[0]      = wtDe[0] < 1e-10 ? 0 : (hlc3Val - wtEsa[0]) / (0.015 * wtDe[0]);
-            wt1Series[0] = EMA(wtCi, WtAverageLen)[0];
-            wt2Series[0] = SMA(wt1Series, WtMALen)[0];
-
-            double wt1     = wt1Series[0];
-            double wt2     = wt2Series[0];
-            double wt2Prev = wt2Series[1];
-            double wt1Prev = wt1Series[1];
-
-            bool wtCrossUp    = wt1Prev < wt2Prev && wt1 >= wt2;
-            bool wtCrossDown  = wt1Prev > wt2Prev && wt1 <= wt2;
-            bool wtOversold   = wt2 <= -53;
-            bool wtOverbought = wt2 >= 53;
-
-            // =====================
             // Compute MFI
             // =====================
             double candleRange = High[0] - Low[0];
             mfiSeries[0] = candleRange < 1e-10 ? 0 :
                 ((Close[0] - Open[0]) / candleRange) * MfiMultiplier;
-            double mfi        = SMA(mfiSeries, MfiPeriod)[0];
-            double mfiAvg5    = 0;
-            for (int i = 1; i <= MfiLookback && CurrentBar - i >= 0; i++)
-                mfiAvg5 += SMA(mfiSeries, MfiPeriod)[i];
-            mfiAvg5 /= MfiLookback;
+
+            bool mfiConsistentUp   = true;
+            bool mfiConsistentDown = true;
+            for (int i = 0; i < MfiConsecutiveBars && CurrentBar - i >= 1; i++)
+            {
+                double mfiCur  = SMA(mfiSeries, MfiPeriod)[i];
+                double mfiPrev = SMA(mfiSeries, MfiPeriod)[i + 1];
+                if (mfiCur <= mfiPrev) mfiConsistentUp   = false;
+                if (mfiCur >= mfiPrev) mfiConsistentDown = false;
+            }
 
             // =====================
-            // MACD values
+            // MACD consecutive check
             // =====================
-            double macdVal      = macdInd[0];
-            double macdAvg      = macdInd.Avg[0];
-            double macdValPrev  = macdInd[1];
-            double macdAvgPrev  = macdInd.Avg[1];
-            double macdHist     = macdVal - macdAvg;
-            double macdHistPrev = macdValPrev - macdAvgPrev;
+            bool macdConsistentUp   = true;
+            bool macdConsistentDown = true;
+            for (int i = 0; i < MacdConsecutiveBars && CurrentBar - i >= 1; i++)
+            {
+                double histCur  = macdInd[i]     - macdInd.Avg[i];
+                double histPrev = macdInd[i + 1] - macdInd.Avg[i + 1];
+                if (histCur <= histPrev) macdConsistentUp   = false;
+                if (histCur >= histPrev) macdConsistentDown = false;
+            }
+
+            // =====================
+            // EMA 20
+            // =====================
+            double ema20Val = ema20[0];
+
+            // =====================
+            // Keltner lookback
+            // =====================
+            bool keltnerTouchedLow  = false;
+            bool keltnerTouchedHigh = false;
+            if (UseKeltner)
+            {
+                for (int i = 0; i < KeltnerLookback && CurrentBar - i >= 0; i++)
+                {
+                    if (Low[i]  < keltner.Lower[i]) keltnerTouchedLow  = true;
+                    if (High[i] > keltner.Upper[i]) keltnerTouchedHigh = true;
+                    if (keltnerTouchedLow && keltnerTouchedHigh) break;
+                }
+            }
 
             // =====================
             // LONG criteria
             // =====================
-
-            // C1 REQUIRED: QR Green - all 4 stochs rotating up
-            bool s1Up   = (s1 - s1Prev) > 0  && s1 <= 50;
-            bool s2Up   = (s2 - s2Prev) > 0  && s2 <= 50;
-            bool s3Up   = (s3 - s3Prev) >= 0 && s3 < 20;
-            bool s4Up   = (s4 - s4Prev) >= 0 && s4 < 20;
-            bool c1Long = s1Up && s2Up && s3Up && s4Up;
-
-            // C2 REQUIRED: Keltner - N candles below lower band
-            bool c2Long = true;
-            for (int i = 0; i < KeltnerCandleCount; i++)
-                if (Close[i] >= keltner.Lower[i]) { c2Long = false; break; }
-
-            // C3 OPTIONAL: VWAP - price below lower band 2
-            bool c3Long = Close[0] <= vwapLowerBand2;
-
-            // C4 OPTIONAL: MFI sloping up vs avg of last N bars
-            bool c4Long = UseMfi && mfi > mfiAvg5;
-
-            // C5 OPTIONAL: WaveTrend green dot
-            bool c5Long = UseWaveTrend && wtCrossUp && wtOversold;
-
-            // C6 OPTIONAL: MACD histogram negative but contracting
-            bool c6Long = UseMacd && macdHist < 0 && macdHist > macdHistPrev;
+            bool s1Up  = (s1 - s1Prev) > 0 && s1 <= 50;
+            bool s2Up  = (s2 - s2Prev) > 0 && s2 <= 50;
+            bool s3Up  = (s3 - s3Prev) > 0 && s3 < 20;
+            bool s4Up  = (s4 - s4Prev) > 0 && s4 < 20;
+            int qrUpCount = (s1Up ? 1 : 0) + (s2Up ? 1 : 0) + (s3Up ? 1 : 0) + (s4Up ? 1 : 0);
+            bool c1Long = qrUpCount >= QRMinCount;
+            bool c2Long = !UseKeltner || keltnerTouchedLow;
+            bool c3Long = UseMfi  && mfiConsistentUp;
+            bool c4Long = UseMacd && macdConsistentUp;
 
             int longScore = (c3Long ? 1 : 0)
-                          + (c4Long ? 1 : 0)
-                          + (c5Long ? 1 : 0)
-                          + (c6Long ? 1 : 0);
+                          + (c4Long ? 1 : 0);
 
             // =====================
             // SHORT criteria
             // =====================
-
-            // C1 REQUIRED: QR Red - all 4 stochs rotating down
-            bool s1Down  = (s1 - s1Prev) < 0  && s1 >= 50;
-            bool s2Down  = (s2 - s2Prev) < 0  && s2 >= 50;
-            bool s3Down  = (s3 - s3Prev) <= 0 && s3 > 80;
-            bool s4Down  = (s4 - s4Prev) <= 0 && s4 > 80;
-            bool c1Short = s1Down && s2Down && s3Down && s4Down;
-
-            // C2 REQUIRED: Keltner - N candles above upper band
-            bool c2Short = true;
-            for (int i = 0; i < KeltnerCandleCount; i++)
-                if (Close[i] <= keltner.Upper[i]) { c2Short = false; break; }
-
-            // C3 OPTIONAL: VWAP - price above upper band 2
-            bool c3Short = Close[0] >= vwapUpperBand2;
-
-            // C4 OPTIONAL: MFI sloping down vs avg of last N bars
-            bool c4Short = UseMfi && mfi < mfiAvg5;
-
-            // C5 OPTIONAL: WaveTrend red dot
-            bool c5Short = UseWaveTrend && wtCrossDown && wtOverbought;
-
-            // C6 OPTIONAL: MACD histogram positive but contracting
-            bool c6Short = UseMacd && macdHist > 0 && macdHist < macdHistPrev;
+            bool s1Down  = (s1 - s1Prev) < 0 && s1 >= 50;
+            bool s2Down  = (s2 - s2Prev) < 0 && s2 >= 50;
+            bool s3Down  = (s3 - s3Prev) < 0 && s3 > 80;
+            bool s4Down  = (s4 - s4Prev) < 0 && s4 > 80;
+            int qrDownCount = (s1Down ? 1 : 0) + (s2Down ? 1 : 0) + (s3Down ? 1 : 0) + (s4Down ? 1 : 0);
+            bool c1Short = qrDownCount >= QRMinCount;
+            bool c2Short = !UseKeltner || keltnerTouchedHigh;
+            bool c3Short = UseMfi  && mfiConsistentDown;
+            bool c4Short = UseMacd && macdConsistentDown;
 
             int shortScore = (c3Short ? 1 : 0)
-                           + (c4Short ? 1 : 0)
-                           + (c5Short ? 1 : 0)
-                           + (c6Short ? 1 : 0);
-
-            // =====================
-            // DEBUG
-            // =====================
-            Print(string.Format("{0} | LONG  C1(req)={1} C2(req)={2} Score={3}/4 C3={4} C4={5} C5={6} C6={7}",
-                Time[0], c1Long, c2Long, longScore, c3Long, c4Long, c5Long, c6Long));
-            Print(string.Format("{0} | SHORT C1(req)={1} C2(req)={2} Score={3}/4 C3={4} C4={5} C5={6} C6={7}",
-                Time[0], c1Short, c2Short, shortScore, c3Short, c4Short, c5Short, c6Short));
+                           + (c4Short ? 1 : 0);
 
             // =====================
             // EXITS
             // =====================
             if (Position.MarketPosition == MarketPosition.Long)
             {
-                // Stoch 4 exit
-                if (TargetType == ProfitTargetType.Stoch4 && s4 >= 80)
-                    ExitLong("ExitLong_Stoch4", "EnterLong");
-
-                // Keltner other side exit
-                if (TargetType == ProfitTargetType.KeltnerOtherSide && Close[0] >= keltner.Upper[0])
-                    ExitLong("ExitLong_Keltner", "EnterLong");
-
-                // Stop loss check
                 if (Close[0] <= stopPrice)
                     ExitLong("StopLoss", "EnterLong");
 
-                // Target check for fixed point / RR targets
-                if (TargetType != ProfitTargetType.Stoch4 && TargetType != ProfitTargetType.KeltnerOtherSide)
+                if (TargetType == ProfitTargetType.Stoch4 && s4 >= 80)
+                    ExitLong("ExitLong_Stoch4", "EnterLong");
+
+                if (TargetType == ProfitTargetType.KeltnerOtherSide && Close[0] >= keltner.Upper[0])
+                    ExitLong("ExitLong_Keltner", "EnterLong");
+
+                if (TargetType == ProfitTargetType.EMA20 && Close[0] >= ema20Val)
+                    ExitLong("ExitLong_EMA20", "EnterLong");
+
+                if (TargetType == ProfitTargetType.RR1to1   ||
+                    TargetType == ProfitTargetType.RR1to1_5 ||
+                    TargetType == ProfitTargetType.RR1to2   ||
+                    TargetType == ProfitTargetType.RR1to3   ||
+                    TargetType == ProfitTargetType.FixedPoints)
                     if (Close[0] >= targetPrice)
                         ExitLong("ProfitTarget", "EnterLong");
             }
             else if (Position.MarketPosition == MarketPosition.Short)
             {
-                // Stoch 4 exit
-                if (TargetType == ProfitTargetType.Stoch4 && s4 <= 20)
-                    ExitShort("ExitShort_Stoch4", "EnterShort");
-
-                // Keltner other side exit
-                if (TargetType == ProfitTargetType.KeltnerOtherSide && Close[0] <= keltner.Lower[0])
-                    ExitShort("ExitShort_Keltner", "EnterShort");
-
-                // Stop loss check
                 if (Close[0] >= stopPrice)
                     ExitShort("StopLoss", "EnterShort");
 
-                // Target check for fixed point / RR targets
-                if (TargetType != ProfitTargetType.Stoch4 && TargetType != ProfitTargetType.KeltnerOtherSide)
+                if (TargetType == ProfitTargetType.Stoch4 && s4 <= 20)
+                    ExitShort("ExitShort_Stoch4", "EnterShort");
+
+                if (TargetType == ProfitTargetType.KeltnerOtherSide && Close[0] <= keltner.Lower[0])
+                    ExitShort("ExitShort_Keltner", "EnterShort");
+
+                if (TargetType == ProfitTargetType.EMA20 && Close[0] <= ema20Val)
+                    ExitShort("ExitShort_EMA20", "EnterShort");
+
+                if (TargetType == ProfitTargetType.RR1to1   ||
+                    TargetType == ProfitTargetType.RR1to1_5 ||
+                    TargetType == ProfitTargetType.RR1to2   ||
+                    TargetType == ProfitTargetType.RR1to3   ||
+                    TargetType == ProfitTargetType.FixedPoints)
                     if (Close[0] <= targetPrice)
                         ExitShort("ProfitTarget", "EnterShort");
             }
@@ -357,73 +258,50 @@ namespace NinjaTrader.NinjaScript.Strategies
             {
                 if (c1Long && c2Long && longScore >= MinScore)
                 {
-                    double stop = CalculateStop(true);
-                    double risk = Math.Abs(Close[0] - stop);
                     entryPrice  = Close[0];
-                    stopPrice   = stop;
+                    stopPrice   = Close[0] - StopPoints * TickSize;
+                    double risk = Math.Abs(Close[0] - stopPrice);
                     targetPrice = CalculateTarget(true, entryPrice, risk);
                     EnterLong(Quantity, "EnterLong");
                 }
                 else if (c1Short && c2Short && shortScore >= MinScore)
                 {
-                    double stop = CalculateStop(false);
-                    double risk = Math.Abs(Close[0] - stop);
                     entryPrice  = Close[0];
-                    stopPrice   = stop;
+                    stopPrice   = Close[0] + StopPoints * TickSize;
+                    double risk = Math.Abs(Close[0] - stopPrice);
                     targetPrice = CalculateTarget(false, entryPrice, risk);
                     EnterShort(Quantity, "EnterShort");
                 }
             }
-        }
 
-        private double CalculateStop(bool isLong)
-        {
-            switch (StopType)
-            {
-                case StopLossType.Fixed:
-                    return isLong ? Close[0] - StopPoints * TickSize : Close[0] + StopPoints * TickSize;
-
-                case StopLossType.ATR:
-                    return isLong
-                        ? Close[0] - AtrMultiplier * atrInd[0]
-                        : Close[0] + AtrMultiplier * atrInd[0];
-
-                case StopLossType.SwingHL:
-                    if (isLong)
-                    {
-                        double swingLow = Low[0];
-                        for (int i = 1; i <= SwingLookback && CurrentBar - i >= 0; i++)
-                            swingLow = Math.Min(swingLow, Low[i]);
-                        return swingLow - TickSize;
-                    }
-                    else
-                    {
-                        double swingHigh = High[0];
-                        for (int i = 1; i <= SwingLookback && CurrentBar - i >= 0; i++)
-                            swingHigh = Math.Max(swingHigh, High[i]);
-                        return swingHigh + TickSize;
-                    }
-
-                default:
-                    return isLong ? Close[0] - StopPoints * TickSize : Close[0] + StopPoints * TickSize;
-            }
+            // =====================
+            // DEBUG
+            // =====================
+            Print(string.Format("{0} | LONG  C1(qr={1}/{2}) C2(kc={3}) Score={4}/2 C3={5} C4={6}",
+                Time[0], qrUpCount, QRMinCount, c2Long, longScore, c3Long, c4Long));
+            Print(string.Format("{0} | SHORT C1(qr={1}/{2}) C2(kc={3}) Score={4}/2 C3={5} C4={6}",
+                Time[0], qrDownCount, QRMinCount, c2Short, shortScore, c3Short, c4Short));
         }
 
         private double CalculateTarget(bool isLong, double entry, double risk)
         {
-            double multiplier = 1.0;
             switch (TargetType)
             {
-                case ProfitTargetType.RR1to1:   multiplier = 1.0;  break;
-                case ProfitTargetType.RR1to1_5: multiplier = 1.5;  break;
-                case ProfitTargetType.RR1to2:   multiplier = 2.0;  break;
-                case ProfitTargetType.RR1to3:   multiplier = 3.0;  break;
+                case ProfitTargetType.RR1to1:
+                    return isLong ? entry + risk       : entry - risk;
+                case ProfitTargetType.RR1to1_5:
+                    return isLong ? entry + risk * 1.5 : entry - risk * 1.5;
+                case ProfitTargetType.RR1to2:
+                    return isLong ? entry + risk * 2.0 : entry - risk * 2.0;
+                case ProfitTargetType.RR1to3:
+                    return isLong ? entry + risk * 3.0 : entry - risk * 3.0;
                 case ProfitTargetType.FixedPoints:
-                    return isLong ? entry + TargetPoints * TickSize : entry - TargetPoints * TickSize;
+                    return isLong
+                        ? entry + TargetPoints * TickSize
+                        : entry - TargetPoints * TickSize;
                 default:
                     return isLong ? entry + risk : entry - risk;
             }
-            return isLong ? entry + risk * multiplier : entry - risk * multiplier;
         }
 
         private void ComputeStoch(int kLen, int smoothKLen, int dLen,
@@ -440,112 +318,48 @@ namespace NinjaTrader.NinjaScript.Strategies
             dValue     = dSeries[0];
         }
 
-        // =====================
-        // Enums
-        // =====================
-        public enum StopLossType   { Fixed, ATR, SwingHL }
-        public enum ProfitTargetType { Stoch4, KeltnerOtherSide, RR1to1, RR1to1_5, RR1to2, RR1to3, FixedPoints }
+        public enum ProfitTargetType { Stoch4, KeltnerOtherSide, EMA20, RR1to1, RR1to1_5, RR1to2, RR1to3, FixedPoints }
 
         // =====================
         // Properties
         // =====================
 
         [NinjaScriptProperty]
-        [Range(1, 100)]
-        [Display(Name = "Quantity", Order = 1, GroupName = "General")]
+        [Range(1, 40)]
+        [Display(Name = "Quantity (contracts)", Order = 1, GroupName = "General")]
         public int Quantity { get; set; }
 
         [NinjaScriptProperty]
-        [Range(0, 4)]
-        [Display(Name = "Min Optional Score (0-4)", Order = 2, GroupName = "General")]
+        [Range(0, 2)]
+        [Display(Name = "Min Optional Score (0-2)", Order = 2, GroupName = "General")]
         public int MinScore { get; set; }
 
         [NinjaScriptProperty]
-        [Range(1, 300)]
-        [Display(Name = "%K Length (Stoch 1)", Order = 1, GroupName = "Stochastics")]
-        public int K1 { get; set; }
+        [Range(1, 4)]
+        [Display(Name = "QR Min Stochastics Count (1-4)", Order = 3, GroupName = "General")]
+        public int QRMinCount { get; set; }
 
         [NinjaScriptProperty]
-        [Range(1, 300)]
-        [Display(Name = "%D Smoothing (Stoch 1)", Order = 2, GroupName = "Stochastics")]
-        public int D1 { get; set; }
-
-        [NinjaScriptProperty]
-        [Range(1, 300)]
-        [Display(Name = "%K Length (Stoch 2)", Order = 1, GroupName = "Stochastics")]
-        public int K2 { get; set; }
-
-        [NinjaScriptProperty]
-        [Range(1, 300)]
-        [Display(Name = "%D Smoothing (Stoch 2)", Order = 2, GroupName = "Stochastics")]
-        public int D2 { get; set; }
-
-        [NinjaScriptProperty]
-        [Range(1, 600)]
-        [Display(Name = "%K Length (Stoch 3)", Order = 1, GroupName = "Stochastics")]
-        public int K3 { get; set; }
-
-        [NinjaScriptProperty]
-        [Range(1, 600)]
-        [Display(Name = "%D Smoothing (Stoch 3)", Order = 2, GroupName = "Stochastics")]
-        public int D3 { get; set; }
-
-        [NinjaScriptProperty]
-        [Range(1, 1000)]
-        [Display(Name = "%K Length (Stoch 4)", Order = 1, GroupName = "Stochastics")]
-        public int K4 { get; set; }
-
-        [NinjaScriptProperty]
-        [Range(1, 1000)]
-        [Display(Name = "%D Smoothing (Stoch 4)", Order = 2, GroupName = "Stochastics")]
-        public int D4 { get; set; }
-
-        [NinjaScriptProperty]
-        [Range(1, 50)]
-        [Display(Name = "Smoothing (Stoch 4)", Order = 3, GroupName = "Stochastics")]
-        public int SmoothK4 { get; set; }
+        [Display(Name = "Use Keltner Channel (C2)", Order = 1, GroupName = "Keltner Channel")]
+        public bool UseKeltner { get; set; }
 
         [NinjaScriptProperty]
         [Range(1, 100)]
-        [Display(Name = "Keltner Period", Order = 1, GroupName = "Keltner Channel")]
+        [Display(Name = "Keltner Period", Order = 2, GroupName = "Keltner Channel")]
         public int KeltnerPeriod { get; set; }
 
         [NinjaScriptProperty]
         [Range(0.1, 10.0)]
-        [Display(Name = "Keltner Multiplier", Order = 2, GroupName = "Keltner Channel")]
+        [Display(Name = "Keltner Multiplier", Order = 3, GroupName = "Keltner Channel")]
         public double KeltnerMultiplier { get; set; }
 
         [NinjaScriptProperty]
         [Range(1, 20)]
-        [Display(Name = "Candles Outside Keltner", Order = 3, GroupName = "Keltner Channel")]
-        public int KeltnerCandleCount { get; set; }
+        [Display(Name = "Keltner Lookback Bars", Order = 4, GroupName = "Keltner Channel")]
+        public int KeltnerLookback { get; set; }
 
         [NinjaScriptProperty]
-        [Range(0.1, 10.0)]
-        [Display(Name = "VWAP Band Multiplier", Order = 1, GroupName = "VWAP")]
-        public double VwapBandMultiplier { get; set; }
-
-        [NinjaScriptProperty]
-        [Display(Name = "Use WaveTrend (C5)", Order = 1, GroupName = "VuManChu WaveTrend")]
-        public bool UseWaveTrend { get; set; }
-
-        [NinjaScriptProperty]
-        [Range(1, 50)]
-        [Display(Name = "WT Channel Length", Order = 2, GroupName = "VuManChu WaveTrend")]
-        public int WtChannelLen { get; set; }
-
-        [NinjaScriptProperty]
-        [Range(1, 50)]
-        [Display(Name = "WT Average Length", Order = 3, GroupName = "VuManChu WaveTrend")]
-        public int WtAverageLen { get; set; }
-
-        [NinjaScriptProperty]
-        [Range(1, 20)]
-        [Display(Name = "WT MA Length", Order = 4, GroupName = "VuManChu WaveTrend")]
-        public int WtMALen { get; set; }
-
-        [NinjaScriptProperty]
-        [Display(Name = "Use Money Flow (C4)", Order = 1, GroupName = "Money Flow")]
+        [Display(Name = "Use Money Flow (C3)", Order = 1, GroupName = "Money Flow")]
         public bool UseMfi { get; set; }
 
         [NinjaScriptProperty]
@@ -560,11 +374,11 @@ namespace NinjaTrader.NinjaScript.Strategies
 
         [NinjaScriptProperty]
         [Range(1, 20)]
-        [Display(Name = "MFI Lookback Bars", Order = 4, GroupName = "Money Flow")]
-        public int MfiLookback { get; set; }
+        [Display(Name = "MFI Consecutive Bars", Order = 4, GroupName = "Money Flow")]
+        public int MfiConsecutiveBars { get; set; }
 
         [NinjaScriptProperty]
-        [Display(Name = "Use MACD (C6)", Order = 1, GroupName = "MACD")]
+        [Display(Name = "Use MACD (C4)", Order = 1, GroupName = "MACD")]
         public bool UseMacd { get; set; }
 
         [NinjaScriptProperty]
@@ -583,28 +397,14 @@ namespace NinjaTrader.NinjaScript.Strategies
         public int MacdSignal { get; set; }
 
         [NinjaScriptProperty]
-        [Display(Name = "Stop Loss Type", Order = 1, GroupName = "Stop Loss")]
-        public StopLossType StopType { get; set; }
+        [Range(1, 20)]
+        [Display(Name = "MACD Consecutive Bars Curving", Order = 5, GroupName = "MACD")]
+        public int MacdConsecutiveBars { get; set; }
 
         [NinjaScriptProperty]
         [Range(1, 10000)]
-        [Display(Name = "Fixed Stop (ticks)", Order = 2, GroupName = "Stop Loss")]
+        [Display(Name = "Fixed Stop (ticks)", Order = 1, GroupName = "Stop Loss")]
         public int StopPoints { get; set; }
-
-        [NinjaScriptProperty]
-        [Range(0.1, 10.0)]
-        [Display(Name = "ATR Multiplier", Order = 3, GroupName = "Stop Loss")]
-        public double AtrMultiplier { get; set; }
-
-        [NinjaScriptProperty]
-        [Range(1, 100)]
-        [Display(Name = "ATR Period", Order = 4, GroupName = "Stop Loss")]
-        public int AtrPeriod { get; set; }
-
-        [NinjaScriptProperty]
-        [Range(1, 100)]
-        [Display(Name = "Swing Lookback Bars", Order = 5, GroupName = "Stop Loss")]
-        public int SwingLookback { get; set; }
 
         [NinjaScriptProperty]
         [Display(Name = "Profit Target Type", Order = 1, GroupName = "Profit Target")]
