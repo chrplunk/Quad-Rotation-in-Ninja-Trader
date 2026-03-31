@@ -530,8 +530,8 @@ namespace NinjaTrader.NinjaScript.Indicators
 			bool s4Below30 = s4 < 30;
 			bool s4Above70 = s4 > 70;
 
-			bool bearCont = s4Below30 && CrossBelow(dSeries1, 80, 1) && s1WasAbove90 && bearShieldCount >= 3;
-			bool bullCont = s4Above70 && CrossAbove(dSeries1, 20, 1) && s1WasBelow10 && bullShieldCount >= 3;
+			bool bearCont = s4Above70 && CrossBelow(dSeries1, 80, 1) && s1WasAbove90 && bullShieldCount >= 3;
+			bool bullCont = s4Below30 && CrossAbove(dSeries1, 20, 1) && s1WasBelow10 && bearShieldCount >= 3;
 
 			if (ShowZingers)
 			{
