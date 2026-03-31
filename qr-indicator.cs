@@ -302,6 +302,8 @@ namespace NinjaTrader.NinjaScript.Indicators
 
 		private int barsSinceStoch4Le90;
 		private int barsSinceStoch4Ge10;
+		private int barsSinceShieldAbove90Active;
+		private int barsSinceShieldBelow10Active;
 
 		private bool prevBgRed, prevBgGreen, prevSuperDown, prevSuperUp, prevBearCont, prevBullCont, prevShieldAbove90, prevShieldBelow10;
 
