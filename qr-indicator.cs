@@ -510,28 +510,28 @@ namespace NinjaTrader.NinjaScript.Indicators
 			prevSuperDown = superDown;
 			prevSuperUp   = superUp;
 
-			// Zinger logic - arrows in subpanel
-			bool s1WasAbove90 = false;
-			bool s1WasBelow10 = false;
-			for (int i = 1; i <= 10 && CurrentBar - i >= 0; i++)
+			// Zinger logic: S4 pegged at extreme for X bars, S1 rotates to opposite extreme, then curves back
+			bool s1WasAbove80 = false;
+			bool s1WasBelow20 = false;
+			for (int i = 1; i <= 20 && CurrentBar - i >= 0; i++)
 			{
-				if (dSeries1[i] > 90) s1WasAbove90 = true;
-				if (dSeries1[i] < 10) s1WasBelow10 = true;
+				if (dSeries1[i] > 80) s1WasAbove80 = true;
+				if (dSeries1[i] < 20) s1WasBelow20 = true;
 			}
 
-			int bearShieldCount = 0;
-			int bullShieldCount = 0;
-			for (int i = 0; i < 10 && CurrentBar - i >= 0; i++)
+			int bearShieldCount = 0; // bars S4 pegged below 10
+			int bullShieldCount = 0; // bars S4 pegged above 90
+			int zingerLookback = Math.Max(AbcdBars90, AbcdBars10) + 20;
+			for (int i = 0; i < zingerLookback && CurrentBar - i >= 0; i++)
 			{
 				if (dSeries4[i] < 10) bearShieldCount++;
 				if (dSeries4[i] > 90) bullShieldCount++;
 			}
 
-			bool s4Below30 = s4 < 30;
-			bool s4Above70 = s4 > 70;
-
-			bool bearCont = s4Below30 && CrossBelow(dSeries1, 80, 1) && s1WasAbove90 && bearShieldCount >= 3;
-			bool bullCont = s4Above70 && CrossAbove(dSeries1, 20, 1) && s1WasBelow10 && bullShieldCount >= 3;
+			// Bearish zinger: S4 pegged below 10, S1 bounced to above 80, now curving back below 80
+			bool bearCont = bearShieldCount >= AbcdBars10 && CrossBelow(dSeries1, 80, 1) && s1WasAbove80;
+			// Bullish zinger: S4 pegged above 90, S1 dipped to below 20, now curving back above 20
+			bool bullCont = bullShieldCount >= AbcdBars90 && CrossAbove(dSeries1, 20, 1) && s1WasBelow20;
 
 			if (ShowZingers)
 			{
